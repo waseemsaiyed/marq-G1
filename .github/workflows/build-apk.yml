@@ -1,0 +1,86 @@
+name: Build Android APK
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build-apk:
+    name: Build & Package Android APK
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Java JDK (Version 21)
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+
+      - name: Setup Node.js (Version 22)
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Accept Android SDK Licenses
+        run: |
+          yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses || true
+
+      - name: Install Project Dependencies
+        run: |
+          npm install --legacy-peer-deps
+
+      - name: Install Capacitor Core, CLI & Android Platforms
+        run: |
+          npm install @capacitor/core @capacitor/cli @capacitor/android @capacitor-community/bluetooth-le
+
+      - name: Build Web Application (Vite)
+        run: |
+          npm run build
+
+      - name: Initialize Android Project
+        run: |
+          if [ ! -d "android" ]; then
+            echo "Adding Capacitor Android platform..."
+            npx cap add android
+          else
+            echo "Android directory already exists."
+          fi
+
+      - name: Configure Android Manifest (BLE & ESP32 Cleartext)
+        run: |
+          node scripts/update-manifest.js
+
+      - name: Sync Capacitor Assets & Native Plugins
+        run: |
+          npx cap sync android
+
+      - name: Re-apply Android Manifest Permissions Post-Sync
+        run: |
+          node scripts/update-manifest.js
+
+      - name: Grant Execute Permission to Gradle Wrapper
+        run: |
+          chmod +x android/gradlew
+
+      - name: Build Debug APK with Gradle
+        run: |
+          cd android
+          ./gradlew assembleDebug --no-daemon --stacktrace
+
+      - name: Verify APK Generation
+        run: |
+          echo "Listing generated APK files:"
+          ls -la android/app/build/outputs/apk/debug/
+
+      - name: Upload APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: MarQ-Clinical-Remote-debug-apk
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 30

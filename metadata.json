@@ -1,0 +1,8 @@
+{
+  "name": "MarQ Clinical Remote",
+  "description": "Hospital-grade clinical smart bed remote controller featuring real-time telemetry, bed articulation, perimeter safety sentry, and comfort lighting controls.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

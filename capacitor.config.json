@@ -1,0 +1,25 @@
+{
+  "appId": "com.marq.clinical.remote",
+  "appName": "MarQ Clinical Remote",
+  "webDir": "dist",
+  "bundledWebRuntime": false,
+  "server": {
+    "androidScheme": "https",
+    "cleartext": true
+  },
+  "android": {
+    "allowMixedContent": true,
+    "captureInput": true,
+    "webContentsDebuggingEnabled": true
+  },
+  "plugins": {
+    "BluetoothLe": {
+      "displayStrings": {
+        "scanning": "Scanning for nearby MarQ Bed controllers...",
+        "cancel": "Cancel",
+        "availableDevices": "Available Medical Controllers",
+        "noDeviceFound": "No ESP32 controllers found"
+      }
+    }
+  }
+}
