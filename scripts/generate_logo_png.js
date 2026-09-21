@@ -150,7 +150,6 @@ function drawMarqLogo(x, y, w, h) {
 }
 
 const logoPng = createPNG(480, 140, drawMarqLogo);
-fs.writeFileSync('./public/logo-marq.png', logoPng);
 fs.writeFileSync('./public/logo marq.png', logoPng);
 
 console.log('Successfully generated public/logo-marq.png and public/logo marq.png');
