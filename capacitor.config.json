@@ -1,6 +1,6 @@
 {
   "appId": "com.marq.clinical.remote",
-  "appName": "MarQ Clinical Remote",
+  "appName": "MarQ W-1",
   "webDir": "dist",
   "bundledWebRuntime": false,
   "server": {
