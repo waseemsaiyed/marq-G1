@@ -6,6 +6,7 @@ interface ComfortScreenProps {
   setBedState: React.Dispatch<React.SetStateAction<BedState>>;
   onTriggerEStop: () => void;
   onTriggerNurseCall: () => void;
+  onOpenPatientChart?: (tab?: 'vitals' | 'mass' | 'diagnostic' | 'medication' | 'doctor' | 'emergency') => void;
 }
 
 export const ComfortScreen: React.FC<ComfortScreenProps> = ({
@@ -13,6 +14,7 @@ export const ComfortScreen: React.FC<ComfortScreenProps> = ({
   setBedState,
   onTriggerEStop,
   onTriggerNurseCall,
+  onOpenPatientChart,
 }) => {
   const [tareSuccess, setTareSuccess] = useState(false);
   const [intercomActive, setIntercomActive] = useState(false);
@@ -117,31 +119,31 @@ export const ComfortScreen: React.FC<ComfortScreenProps> = ({
             onTriggerNurseCall();
             setTimeout(() => setIntercomActive(false), 3000);
           }}
-          className="w-full min-h-[64px] bg-secondary-container hover:bg-secondary active:scale-[0.98] transition-all rounded-xl p-2.5 flex items-center justify-between text-on-primary shadow-[0_8px_20px_-4px_rgba(251,120,0,0.38)] cursor-pointer"
+          className="w-full min-h-[58px] sm:min-h-[64px] bg-secondary-container hover:bg-secondary active:scale-[0.98] transition-all rounded-xl p-2 sm:p-2.5 flex items-center justify-between text-on-primary shadow-[0_8px_20px_-4px_rgba(251,120,0,0.38)] cursor-pointer"
         >
-          <div className="flex items-center gap-3 pl-1">
-            <div className="w-11 h-11 rounded-full bg-on-primary/20 flex items-center justify-center shrink-0">
+          <div className="flex items-center gap-2.5 sm:gap-3 pl-1">
+            <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-full bg-on-primary/20 flex items-center justify-center shrink-0">
               <span
-                className="material-symbols-outlined text-[26px] text-on-primary"
+                className="material-symbols-outlined text-[24px] sm:text-[26px] text-on-primary"
                 style={{ fontVariationSettings: "'FILL' 1" }}
               >
                 emergency
               </span>
             </div>
             <div className="flex flex-col text-left">
-              <span className="text-[14px] sm:text-[15px] font-extrabold text-on-primary tracking-wide leading-tight uppercase">
+              <span className="text-[13px] sm:text-[15px] font-extrabold text-on-primary tracking-wide leading-tight uppercase">
                 {intercomActive ? 'TRANSMITTING TO STATION 4A...' : 'CALL NURSE STATION'}
               </span>
-              <span className="text-xs text-on-primary/90 font-medium">
+              <span className="text-[11px] sm:text-xs text-on-primary/90 font-medium">
                 Station 4A Alerted • Tap to Speak
               </span>
             </div>
           </div>
-          <div className="pr-2 flex items-center gap-1 bg-on-primary/15 px-3 py-1.5 rounded-lg">
-            <span className="material-symbols-outlined text-[18px] text-on-primary animate-pulse">
+          <div className="pr-1.5 sm:pr-2 flex items-center gap-1 bg-on-primary/15 px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-lg">
+            <span className="material-symbols-outlined text-[16px] sm:text-[18px] text-on-primary animate-pulse">
               mic
             </span>
-            <span className="text-[11px] font-bold text-on-primary uppercase">
+            <span className="text-[10px] sm:text-[11px] font-bold text-on-primary uppercase">
               Live
             </span>
           </div>
@@ -204,22 +206,22 @@ export const ComfortScreen: React.FC<ComfortScreenProps> = ({
         </div>
 
         {/* 4-Quadrant Visual Schematic Layout */}
-        <div className="grid grid-cols-2 gap-2.5 bg-surface-container-low p-2.5 rounded-xl border border-outline-variant/15">
+        <div className="grid grid-cols-2 gap-2 sm:gap-2.5 bg-surface-container-low p-2 sm:p-2.5 rounded-xl border border-outline-variant/15">
           {/* Head Left */}
           <button
             onClick={() => toggleRail('headLeft')}
-            className={`p-2.5 rounded-lg shadow-xs flex items-center justify-between text-left transition-all cursor-pointer ${
+            className={`p-2 sm:p-2.5 rounded-lg shadow-xs flex items-center justify-between text-left transition-all cursor-pointer ${
               bedState.rails.headLeft
                 ? 'bg-surface-container-lowest border border-outline-variant/15'
                 : 'bg-secondary-fixed border border-secondary/30'
             }`}
           >
             <div className="flex flex-col">
-              <span className="text-[10px] font-bold text-outline uppercase tracking-wider">
+              <span className="text-[9.5px] sm:text-[10px] font-bold text-outline uppercase tracking-wider">
                 Head Left
               </span>
               <span
-                className={`text-[12px] font-extrabold mt-0.5 ${
+                className={`text-[11px] sm:text-[12px] font-extrabold mt-0.5 ${
                   bedState.rails.headLeft ? 'text-primary' : 'text-secondary'
                 }`}
               >
@@ -227,14 +229,14 @@ export const ComfortScreen: React.FC<ComfortScreenProps> = ({
               </span>
             </div>
             <div
-              className={`w-8 h-8 rounded-full flex items-center justify-center ${
+              className={`w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center ${
                 bedState.rails.headLeft
                   ? 'bg-primary-fixed text-primary'
                   : 'bg-secondary text-on-secondary animate-bounce'
               }`}
             >
               <span
-                className="material-symbols-outlined text-[18px]"
+                className="material-symbols-outlined text-[16px] sm:text-[18px]"
                 style={{ fontVariationSettings: "'FILL' 1" }}
               >
                 {bedState.rails.headLeft ? 'vertical_align_top' : 'vertical_align_bottom'}
@@ -245,18 +247,18 @@ export const ComfortScreen: React.FC<ComfortScreenProps> = ({
           {/* Head Right */}
           <button
             onClick={() => toggleRail('headRight')}
-            className={`p-2.5 rounded-lg shadow-xs flex items-center justify-between text-left transition-all cursor-pointer ${
+            className={`p-2 sm:p-2.5 rounded-lg shadow-xs flex items-center justify-between text-left transition-all cursor-pointer ${
               bedState.rails.headRight
                 ? 'bg-surface-container-lowest border border-outline-variant/15'
                 : 'bg-secondary-fixed border border-secondary/30'
             }`}
           >
             <div className="flex flex-col">
-              <span className="text-[10px] font-bold text-outline uppercase tracking-wider">
+              <span className="text-[9.5px] sm:text-[10px] font-bold text-outline uppercase tracking-wider">
                 Head Right
               </span>
               <span
-                className={`text-[12px] font-extrabold mt-0.5 ${
+                className={`text-[11px] sm:text-[12px] font-extrabold mt-0.5 ${
                   bedState.rails.headRight ? 'text-primary' : 'text-secondary'
                 }`}
               >
@@ -264,14 +266,14 @@ export const ComfortScreen: React.FC<ComfortScreenProps> = ({
               </span>
             </div>
             <div
-              className={`w-8 h-8 rounded-full flex items-center justify-center ${
+              className={`w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center ${
                 bedState.rails.headRight
                   ? 'bg-primary-fixed text-primary'
                   : 'bg-secondary text-on-secondary animate-bounce'
               }`}
             >
               <span
-                className="material-symbols-outlined text-[18px]"
+                className="material-symbols-outlined text-[16px] sm:text-[18px]"
                 style={{ fontVariationSettings: "'FILL' 1" }}
               >
                 {bedState.rails.headRight ? 'vertical_align_top' : 'vertical_align_bottom'}
@@ -282,18 +284,18 @@ export const ComfortScreen: React.FC<ComfortScreenProps> = ({
           {/* Foot Left */}
           <button
             onClick={() => toggleRail('footLeft')}
-            className={`p-2.5 rounded-lg shadow-xs flex items-center justify-between text-left transition-all cursor-pointer ${
+            className={`p-2 sm:p-2.5 rounded-lg shadow-xs flex items-center justify-between text-left transition-all cursor-pointer ${
               bedState.rails.footLeft
                 ? 'bg-surface-container-lowest border border-outline-variant/15'
                 : 'bg-secondary-fixed border border-secondary/30'
             }`}
           >
             <div className="flex flex-col">
-              <span className="text-[10px] font-bold text-outline uppercase tracking-wider">
+              <span className="text-[9.5px] sm:text-[10px] font-bold text-outline uppercase tracking-wider">
                 Foot Left
               </span>
               <span
-                className={`text-[12px] font-extrabold mt-0.5 ${
+                className={`text-[11px] sm:text-[12px] font-extrabold mt-0.5 ${
                   bedState.rails.footLeft ? 'text-primary' : 'text-secondary'
                 }`}
               >
@@ -301,14 +303,14 @@ export const ComfortScreen: React.FC<ComfortScreenProps> = ({
               </span>
             </div>
             <div
-              className={`w-8 h-8 rounded-full flex items-center justify-center ${
+              className={`w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center ${
                 bedState.rails.footLeft
                   ? 'bg-primary-fixed text-primary'
                   : 'bg-secondary text-on-secondary animate-bounce'
               }`}
             >
               <span
-                className="material-symbols-outlined text-[18px]"
+                className="material-symbols-outlined text-[16px] sm:text-[18px]"
                 style={{ fontVariationSettings: "'FILL' 1" }}
               >
                 {bedState.rails.footLeft ? 'vertical_align_top' : 'vertical_align_bottom'}
@@ -319,7 +321,7 @@ export const ComfortScreen: React.FC<ComfortScreenProps> = ({
           {/* Foot Right */}
           <button
             onClick={() => toggleRail('footRight')}
-            className={`p-2.5 rounded-lg shadow-xs flex items-center justify-between text-left transition-all cursor-pointer ${
+            className={`p-2 sm:p-2.5 rounded-lg shadow-xs flex items-center justify-between text-left transition-all cursor-pointer ${
               bedState.rails.footRight
                 ? 'bg-surface-container-lowest border border-outline-variant/15'
                 : 'bg-secondary-fixed border border-secondary/30'
@@ -327,7 +329,7 @@ export const ComfortScreen: React.FC<ComfortScreenProps> = ({
           >
             <div className="flex flex-col">
               <span
-                className={`text-[10px] font-bold uppercase tracking-wider ${
+                className={`text-[9.5px] sm:text-[10px] font-bold uppercase tracking-wider ${
                   bedState.rails.footRight
                     ? 'text-outline'
                     : 'text-on-secondary-fixed-variant'
@@ -336,7 +338,7 @@ export const ComfortScreen: React.FC<ComfortScreenProps> = ({
                 Foot Right
               </span>
               <span
-                className={`text-[12px] font-extrabold mt-0.5 ${
+                className={`text-[11px] sm:text-[12px] font-extrabold mt-0.5 ${
                   bedState.rails.footRight ? 'text-primary' : 'text-secondary'
                 }`}
               >
@@ -344,14 +346,14 @@ export const ComfortScreen: React.FC<ComfortScreenProps> = ({
               </span>
             </div>
             <div
-              className={`w-8 h-8 rounded-full flex items-center justify-center ${
+              className={`w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center ${
                 bedState.rails.footRight
                   ? 'bg-primary-fixed text-primary'
                   : 'bg-secondary text-on-secondary animate-bounce'
               }`}
             >
               <span
-                className="material-symbols-outlined text-[18px]"
+                className="material-symbols-outlined text-[16px] sm:text-[18px]"
                 style={{ fontVariationSettings: "'FILL' 1" }}
               >
                 {bedState.rails.footRight ? 'vertical_align_top' : 'vertical_align_bottom'}
@@ -363,40 +365,40 @@ export const ComfortScreen: React.FC<ComfortScreenProps> = ({
         {/* Central Caster Brake Telemetry */}
         <button
           onClick={toggleCasters}
-          className="w-full bg-surface-container hover:bg-surface-variant/80 p-2.5 rounded-xl flex items-center justify-between text-left transition-colors cursor-pointer"
+          className="w-full bg-surface-container hover:bg-surface-variant/80 p-2 sm:p-2.5 rounded-xl flex items-center justify-between text-left transition-colors cursor-pointer"
         >
-          <div className="flex items-center gap-2.5">
+          <div className="flex items-center gap-2 sm:gap-2.5">
             <div
-              className={`w-9 h-9 rounded-full flex items-center justify-center shrink-0 shadow-xs ${
+              className={`w-8 h-8 sm:w-9 sm:h-9 rounded-full flex items-center justify-center shrink-0 shadow-xs ${
                 bedState.castersLocked ? 'bg-primary text-on-primary' : 'bg-secondary text-on-secondary'
               }`}
             >
               <span
-                className="material-symbols-outlined text-[20px]"
+                className="material-symbols-outlined text-[18px] sm:text-[20px]"
                 style={{ fontVariationSettings: "'FILL' 1" }}
               >
                 {bedState.castersLocked ? 'lock' : 'lock_open'}
               </span>
             </div>
             <div className="flex flex-col">
-              <span className="text-[13px] font-bold text-on-surface">
+              <span className="text-[12px] sm:text-[13px] font-bold text-on-surface">
                 Central Caster System
               </span>
-              <span className="text-xs text-on-surface-variant">
+              <span className="text-[11px] sm:text-xs text-on-surface-variant">
                 {bedState.castersLocked
                   ? 'All 4 Wheel Actuators Engaged'
                   : 'Wheels Unlocked - Mobile Mode'}
               </span>
             </div>
           </div>
-          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-surface-container-lowest shadow-xs">
+          <div className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-full bg-surface-container-lowest shadow-xs">
             <span
               className={`w-2 h-2 rounded-full ${
                 bedState.castersLocked ? 'bg-primary' : 'bg-secondary animate-ping'
               }`}
             />
             <span
-              className={`text-[11px] uppercase font-bold tracking-wide ${
+              className={`text-[10px] sm:text-[11px] uppercase font-bold tracking-wide ${
                 bedState.castersLocked ? 'text-primary' : 'text-secondary'
               }`}
             >
@@ -435,27 +437,58 @@ export const ComfortScreen: React.FC<ComfortScreenProps> = ({
         </div>
 
         {/* Scale Readout Card */}
-        <div className="bg-surface-container-low rounded-xl p-4 flex items-baseline justify-between border border-outline-variant/15">
-          <div className="flex flex-col">
-            <div className="flex items-baseline gap-1.5">
-              <span className="text-[44px] font-extrabold text-primary tracking-tight leading-none tabular-nums">
-                {bedState.patientWeight}
-              </span>
-              <span className="text-[20px] font-bold text-on-surface-variant">
-                kg
+        <div className="bg-surface-container-low rounded-xl p-4 flex flex-col gap-3 border border-outline-variant/15">
+          <div className="flex items-baseline justify-between">
+            <div className="flex flex-col">
+              <div className="flex items-baseline gap-1.5">
+                <span className="text-[44px] font-extrabold text-primary tracking-tight leading-none tabular-nums">
+                  {bedState.patientWeight}
+                </span>
+                <span className="text-[20px] font-bold text-on-surface-variant">
+                  kg
+                </span>
+              </div>
+              <span className="text-xs text-outline font-medium mt-1">
+                Tare Offset: Bedding &amp; IV Lines Excluded (-2.1 kg)
               </span>
             </div>
-            <span className="text-xs text-outline font-medium mt-1">
-              Tare Offset: Bedding &amp; IV Lines Excluded (-2.1 kg)
-            </span>
+            <div className="flex flex-col items-end">
+              <span className="text-[11px] text-primary uppercase font-extrabold tracking-wide">
+                OIML Class III
+              </span>
+              <span className="text-xs text-on-surface-variant font-semibold">
+                ±0.05 kg Tolerance
+              </span>
+            </div>
           </div>
-          <div className="flex flex-col items-end">
-            <span className="text-[11px] text-primary uppercase font-extrabold tracking-wide">
-              OIML Class III
-            </span>
-            <span className="text-xs text-on-surface-variant font-semibold">
-              ±0.05 kg Tolerance
-            </span>
+
+          {/* Patient Stability & Chart Action Row */}
+          <div className="pt-2 border-t border-outline-variant/15 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-medium text-outline">Stability Index:</span>
+              <span
+                className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-extrabold uppercase ${
+                  bedState.patientStability === 'Stable' || !bedState.patientStability
+                    ? 'bg-emerald-100 text-emerald-800'
+                    : bedState.patientStability === 'Critical'
+                    ? 'bg-red-100 text-red-800'
+                    : 'bg-amber-100 text-amber-800'
+                }`}
+              >
+                {bedState.patientStability || 'Stable'}
+              </span>
+            </div>
+
+            {onOpenPatientChart && (
+              <button
+                id="btn-scale-edit-mass"
+                onClick={() => onOpenPatientChart('mass')}
+                className="px-2.5 py-1 rounded-lg bg-surface-container hover:bg-surface-variant text-[11px] font-bold text-primary flex items-center gap-1 cursor-pointer transition-colors shadow-2xs"
+              >
+                <span className="material-symbols-outlined text-[15px]">edit</span>
+                <span>Adjust Mass &amp; Stability</span>
+              </button>
+            )}
           </div>
         </div>
 
@@ -548,30 +581,30 @@ export const ComfortScreen: React.FC<ComfortScreenProps> = ({
           <span className="text-[11px] font-extrabold text-outline uppercase tracking-wider">
             Clinical Illumination Hue
           </span>
-          <div className="grid grid-cols-2 gap-2.5">
+          <div className="grid grid-cols-2 gap-2 sm:gap-2.5">
             {/* Warm Amber Mode */}
             <button
               id="hue-amber"
               onClick={() => setLightHue('amber')}
-              className={`h-14 rounded-xl p-2.5 flex items-center justify-between transition-all active:scale-[0.98] cursor-pointer border ${
+              className={`h-[50px] sm:h-14 rounded-xl p-2 sm:p-2.5 flex items-center justify-between transition-all active:scale-[0.98] cursor-pointer border ${
                 bedState.underBedLight.hue === 'amber'
                   ? 'bg-surface-container border-secondary/30 shadow-xs'
                   : 'bg-surface-container-low border-transparent hover:bg-surface-container'
               }`}
             >
-              <div className="flex items-center gap-2.5">
-                <span className="w-4 h-4 rounded-full bg-secondary-container shadow-xs" />
+              <div className="flex items-center gap-2 sm:gap-2.5">
+                <span className="w-3.5 h-3.5 sm:w-4 sm:h-4 rounded-full bg-secondary-container shadow-xs" />
                 <div className="flex flex-col text-left">
-                  <span className="text-[13px] font-bold text-on-surface">
+                  <span className="text-[12px] sm:text-[13px] font-bold text-on-surface">
                     Warm Amber
                   </span>
-                  <span className="text-[10px] text-outline font-semibold">
+                  <span className="text-[9.5px] sm:text-[10px] text-outline font-semibold">
                     2700K Circadian
                   </span>
                 </div>
               </div>
               <span
-                className={`material-symbols-outlined text-primary text-[20px] transition-opacity ${
+                className={`material-symbols-outlined text-primary text-[18px] sm:text-[20px] transition-opacity ${
                   bedState.underBedLight.hue === 'amber'
                     ? 'opacity-100'
                     : 'opacity-0'
@@ -585,25 +618,25 @@ export const ComfortScreen: React.FC<ComfortScreenProps> = ({
             <button
               id="hue-blue"
               onClick={() => setLightHue('blue')}
-              className={`h-14 rounded-xl p-2.5 flex items-center justify-between transition-all active:scale-[0.98] cursor-pointer border ${
+              className={`h-[50px] sm:h-14 rounded-xl p-2 sm:p-2.5 flex items-center justify-between transition-all active:scale-[0.98] cursor-pointer border ${
                 bedState.underBedLight.hue === 'blue'
                   ? 'bg-surface-container border-primary/30 shadow-xs'
                   : 'bg-surface-container-low border-transparent hover:bg-surface-container'
               }`}
             >
-              <div className="flex items-center gap-2.5">
-                <span className="w-4 h-4 rounded-full bg-primary-fixed-dim shadow-xs" />
+              <div className="flex items-center gap-2 sm:gap-2.5">
+                <span className="w-3.5 h-3.5 sm:w-4 sm:h-4 rounded-full bg-primary-fixed-dim shadow-xs" />
                 <div className="flex flex-col text-left">
-                  <span className="text-[13px] font-bold text-on-surface">
+                  <span className="text-[12px] sm:text-[13px] font-bold text-on-surface">
                     Soft Blue
                   </span>
-                  <span className="text-[10px] text-outline font-semibold">
+                  <span className="text-[9.5px] sm:text-[10px] text-outline font-semibold">
                     4000K Medical
                   </span>
                 </div>
               </div>
               <span
-                className={`material-symbols-outlined text-primary text-[20px] transition-opacity ${
+                className={`material-symbols-outlined text-primary text-[18px] sm:text-[20px] transition-opacity ${
                   bedState.underBedLight.hue === 'blue'
                     ? 'opacity-100'
                     : 'opacity-0'
@@ -618,18 +651,18 @@ export const ComfortScreen: React.FC<ComfortScreenProps> = ({
         {/* Stepless Dimmer Intensity Range */}
         <div className="flex flex-col gap-2">
           <div className="flex items-center justify-between">
-            <span className="text-[11px] font-extrabold text-outline uppercase tracking-wider">
+            <span className="text-[10.5px] sm:text-[11px] font-extrabold text-outline uppercase tracking-wider">
               Dimmer Luminance
             </span>
             <span
               id="dimmer-percentage"
-              className="text-[13px] font-extrabold text-primary"
+              className="text-[12px] sm:text-[13px] font-extrabold text-primary"
             >
               {bedState.underBedLight.brightness}%
             </span>
           </div>
-          <div className="relative w-full h-11 bg-surface-container-low rounded-xl flex items-center px-3 shadow-inner border border-outline-variant/15">
-            <span className="material-symbols-outlined text-outline text-[18px] mr-2">
+          <div className="relative w-full h-10 sm:h-11 bg-surface-container-low rounded-xl flex items-center px-3 shadow-inner border border-outline-variant/15">
+            <span className="material-symbols-outlined text-outline text-[16px] sm:text-[18px] mr-2">
               brightness_low
             </span>
             <input
@@ -642,25 +675,25 @@ export const ComfortScreen: React.FC<ComfortScreenProps> = ({
               disabled={!bedState.underBedLight.enabled}
               className="w-full h-2 rounded-lg bg-surface-container-highest appearance-none cursor-pointer accent-primary focus:outline-none"
             />
-            <span className="material-symbols-outlined text-outline text-[20px] ml-2">
+            <span className="material-symbols-outlined text-outline text-[18px] sm:text-[20px] ml-2">
               brightness_high
             </span>
           </div>
         </div>
 
         {/* Floor Motion Safety Automations */}
-        <div className="w-full bg-surface-container p-2.5 rounded-xl flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-full bg-surface-container-lowest flex items-center justify-center shrink-0 text-primary shadow-xs">
-              <span className="material-symbols-outlined text-[20px]">
+        <div className="w-full bg-surface-container p-2 sm:p-2.5 rounded-xl flex items-center justify-between">
+          <div className="flex items-center gap-2 sm:gap-2.5">
+            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-surface-container-lowest flex items-center justify-center shrink-0 text-primary shadow-xs">
+              <span className="material-symbols-outlined text-[18px] sm:text-[20px]">
                 sensors
               </span>
             </div>
             <div className="flex flex-col">
-              <span className="text-[13px] font-bold text-on-surface">
+              <span className="text-[12px] sm:text-[13px] font-bold text-on-surface">
                 Floor Safety Sensor
               </span>
-              <span className="text-xs text-on-surface-variant">
+              <span className="text-[11px] sm:text-xs text-on-surface-variant">
                 Auto-illuminates path on egress
               </span>
             </div>
@@ -669,14 +702,14 @@ export const ComfortScreen: React.FC<ComfortScreenProps> = ({
           <button
             id="sensor-toggle-btn"
             onClick={toggleFloorSensor}
-            className={`w-12 h-7 rounded-full p-0.5 transition-colors flex items-center cursor-pointer ${
+            className={`w-11 h-6 sm:w-12 sm:h-7 rounded-full p-0.5 transition-colors flex items-center cursor-pointer ${
               bedState.underBedLight.motionSensor
                 ? 'bg-primary justify-end'
                 : 'bg-surface-variant justify-start'
             }`}
           >
-            <div className="w-6 h-6 rounded-full bg-on-primary shadow-xs flex items-center justify-center">
-              <span className="material-symbols-outlined text-[12px] text-primary">
+            <div className="w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-on-primary shadow-xs flex items-center justify-center">
+              <span className="material-symbols-outlined text-[11px] sm:text-[12px] text-primary">
                 {bedState.underBedLight.motionSensor ? 'done' : 'close'}
               </span>
             </div>
@@ -685,16 +718,16 @@ export const ComfortScreen: React.FC<ComfortScreenProps> = ({
       </div>
 
       {/* Bedside Protocol Reference Card */}
-      <div className="w-full bg-surface-container-low rounded-xl p-4 flex flex-col gap-2 border border-outline-variant/15">
+      <div className="w-full bg-surface-container-low rounded-xl p-3 sm:p-4 flex flex-col gap-1.5 sm:gap-2 border border-outline-variant/15">
         <div className="flex items-center gap-2">
           <span className="material-symbols-outlined text-on-surface-variant text-[18px]">
             verified_user
           </span>
-          <span className="text-[13px] font-bold text-on-surface-variant">
+          <span className="text-[12px] sm:text-[13px] font-bold text-on-surface-variant">
             Protocol Verification (ISO 60601-2-52)
           </span>
         </div>
-        <p className="text-xs text-outline leading-relaxed">
+        <p className="text-[11px] sm:text-xs text-outline leading-relaxed">
           Caregiver lockout and automatic rail retention logic are refreshed at 100ms intervals via ESP32 telemetry bus.
         </p>
       </div>
@@ -704,15 +737,15 @@ export const ComfortScreen: React.FC<ComfortScreenProps> = ({
         <button
           id="safety-stop-btn"
           onClick={onTriggerEStop}
-          className="w-full min-h-[64px] bg-tertiary hover:bg-tertiary-container active:scale-[0.97] transition-all rounded-xl flex items-center justify-center gap-3 text-on-tertiary shadow-[0_8px_24px_-4px_rgba(229,57,53,0.35)] cursor-pointer"
+          className="w-full min-h-[58px] sm:min-h-[64px] bg-tertiary hover:bg-tertiary-container active:scale-[0.97] transition-all rounded-xl flex items-center justify-center gap-2.5 sm:gap-3 text-on-tertiary shadow-[0_8px_24px_-4px_rgba(229,57,53,0.35)] cursor-pointer"
         >
           <span
-            className="material-symbols-outlined text-[28px]"
+            className="material-symbols-outlined text-[24px] sm:text-[28px]"
             style={{ fontVariationSettings: "'FILL' 1" }}
           >
             front_hand
           </span>
-          <span className="text-[14px] sm:text-[15px] tracking-wider uppercase font-extrabold text-on-tertiary">
+          <span className="text-[13px] sm:text-[15px] tracking-wider uppercase font-extrabold text-on-tertiary">
             EMERGENCY STOP (ALL MOTORS)
           </span>
         </button>

@@ -23,7 +23,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({
       className="fixed bottom-0 w-full z-40 pb-safe bg-surface-container-lowest/90 backdrop-blur-xl shadow-[0_-1px_8px_rgba(0,0,0,0.04)] border-t border-outline-variant/20"
       id="main-bottom-navigation"
     >
-      <div className="flex justify-between items-center h-16 sm:h-20 px-2 max-w-lg mx-auto">
+      <div className="flex justify-between items-center h-[58px] sm:h-20 px-1.5 sm:px-2 max-w-lg mx-auto">
         {navItems.map((item) => {
           const isActive = currentScreen === item.id;
           return (
@@ -31,7 +31,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({
               key={item.id}
               id={`nav-item-${item.id}`}
               onClick={() => onNavigate(item.id)}
-              className={`flex flex-col items-center justify-center gap-1 flex-1 h-14 transition-all duration-150 cursor-pointer ${
+              className={`flex flex-col items-center justify-center gap-0.5 sm:gap-1 flex-1 h-[50px] sm:h-14 transition-all duration-150 cursor-pointer ${
                 isActive
                   ? 'text-primary font-bold'
                   : 'text-on-surface-variant hover:text-on-surface font-medium'
@@ -39,7 +39,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({
             >
               <div className="relative">
                 <span
-                  className="material-symbols-outlined text-[22px] transition-transform duration-150"
+                  className="material-symbols-outlined text-[20px] sm:text-[22px] transition-transform duration-150"
                   style={{
                     fontVariationSettings: isActive ? "'FILL' 1" : "'FILL' 0",
                   }}
@@ -47,10 +47,10 @@ export const BottomNav: React.FC<BottomNavProps> = ({
                   {item.icon}
                 </span>
                 {isActive && (
-                  <span className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-1.5 h-1.5 rounded-full bg-primary" />
+                  <span className="absolute -bottom-0.5 sm:-bottom-1 left-1/2 -translate-x-1/2 w-1.5 h-1.5 rounded-full bg-primary" />
                 )}
               </div>
-              <span className="text-[11px] leading-tight tracking-tight">
+              <span className="text-[10px] sm:text-[11px] leading-tight tracking-tight">
                 {item.label}
               </span>
             </button>

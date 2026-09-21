@@ -10,17 +10,23 @@ import { BottomNav } from './components/BottomNav';
 import { NurseCallModal } from './components/NurseCallModal';
 import { EStopModal } from './components/EStopModal';
 import { ApkExportModal } from './components/ApkExportModal';
+import { PatientChartModal } from './components/PatientChartModal';
 import { HomeDashboard } from './screens/HomeDashboard';
 import { ComfortScreen } from './screens/ComfortScreen';
 import { AdvancedScreen } from './screens/AdvancedScreen';
 import { PairScreen } from './screens/PairScreen';
 import { SettingsScreen } from './screens/SettingsScreen';
+import { removePairedDevice } from './services/pairedDevicesStorage';
 
 export default function App() {
   const [currentScreen, setCurrentScreen] = useState<ScreenType>('home');
   const [isNurseModalOpen, setIsNurseModalOpen] = useState(false);
   const [isEStopModalOpen, setIsEStopModalOpen] = useState(false);
   const [isApkModalOpen, setIsApkModalOpen] = useState(false);
+  const [isPatientModalOpen, setIsPatientModalOpen] = useState(false);
+  const [patientModalTab, setPatientModalTab] = useState<
+    'vitals' | 'mass' | 'diagnostic' | 'medication' | 'doctor' | 'emergency'
+  >('mass');
 
   // Register PWA Service Worker if in browser
   useEffect(() => {
@@ -65,6 +71,7 @@ export default function App() {
     patientName: 'J. Anderson',
     roomNumber: 'Room 412',
     batteryPercent: 88,
+    lowBatteryThreshold: 20,
     isCharging: true,
     bleSynced: true,
     wifiConnected: true,
@@ -102,6 +109,31 @@ export default function App() {
     }));
   };
 
+  const handleUnpairBed = (bedId: string) => {
+    removePairedDevice(bedId);
+    if (bedState.connectedBedId === bedId) {
+      setBedState((prev) => ({
+        ...prev,
+        connectedBedId: '',
+        roomNumber: 'No Bed Paired',
+        patientName: 'Unassigned',
+        bleSynced: false,
+        wifiConnected: false,
+      }));
+    }
+  };
+
+  const isLowBattery = bedState.batteryPercent < (bedState.lowBatteryThreshold ?? 20);
+
+  const handleOpenPatientChart = (
+    tab?: 'vitals' | 'mass' | 'diagnostic' | 'medication' | 'doctor' | 'emergency'
+  ) => {
+    if (tab) {
+      setPatientModalTab(tab);
+    }
+    setIsPatientModalOpen(true);
+  };
+
   return (
     <div
       className={`min-h-screen flex flex-col bg-surface text-on-surface font-sans selection:bg-primary/20 ${
@@ -114,16 +146,27 @@ export default function App() {
         onTriggerEStop={handleTriggerEStop}
         onSwitchBed={handleSwitchBed}
         onOpenApkModal={() => setIsApkModalOpen(true)}
+        onToggleCharging={() =>
+          setBedState((prev) => ({ ...prev, isCharging: !prev.isCharging }))
+        }
+        onNavigateToPair={() => setCurrentScreen('pair')}
+        onUnpairBed={handleUnpairBed}
+        onOpenPatientChart={handleOpenPatientChart}
       />
 
       {/* Main Screen Content */}
-      <main className="flex-1 w-full px-4 sm:px-5 pt-32 pb-36 max-w-lg mx-auto transition-opacity duration-200">
+      <main
+        className={`flex-1 w-full px-4 sm:px-5 ${
+          isLowBattery ? 'pt-44' : 'pt-32'
+        } pb-36 max-w-lg mx-auto transition-all duration-200`}
+      >
         {currentScreen === 'home' && (
           <HomeDashboard
             bedState={bedState}
             setBedState={setBedState}
             onTriggerEStop={handleTriggerEStop}
             onTriggerNurseCall={handleTriggerNurseCall}
+            onOpenPatientChart={handleOpenPatientChart}
           />
         )}
 
@@ -133,6 +176,7 @@ export default function App() {
             setBedState={setBedState}
             onTriggerEStop={handleTriggerEStop}
             onTriggerNurseCall={handleTriggerNurseCall}
+            onOpenPatientChart={handleOpenPatientChart}
           />
         )}
 
@@ -160,6 +204,8 @@ export default function App() {
             setBedState={setBedState}
             onTriggerEStop={handleTriggerEStop}
             onOpenApkModal={() => setIsApkModalOpen(true)}
+            onNavigateToPair={() => setCurrentScreen('pair')}
+            onOpenPatientChart={handleOpenPatientChart}
           />
         )}
       </main>
@@ -203,6 +249,14 @@ export default function App() {
       <ApkExportModal
         isOpen={isApkModalOpen}
         onClose={() => setIsApkModalOpen(false)}
+      />
+
+      <PatientChartModal
+        isOpen={isPatientModalOpen}
+        onClose={() => setIsPatientModalOpen(false)}
+        bedState={bedState}
+        setBedState={setBedState}
+        initialTab={patientModalTab}
       />
     </div>
   );

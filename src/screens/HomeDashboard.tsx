@@ -1,12 +1,14 @@
-import React, { useRef, useEffect } from 'react';
-import { BedState } from '../types';
+import React, { useRef, useEffect, useState } from 'react';
+import { BedState, PatientProfile } from '../types';
 import { BedVisualizer } from '../components/BedVisualizer';
+import { getPatientProfile } from '../services/patientStorage';
 
 interface HomeDashboardProps {
   bedState: BedState;
   setBedState: React.Dispatch<React.SetStateAction<BedState>>;
   onTriggerEStop: () => void;
   onTriggerNurseCall: () => void;
+  onOpenPatientChart?: (tab?: 'vitals' | 'mass' | 'diagnostic' | 'medication' | 'doctor' | 'emergency') => void;
 }
 
 export const HomeDashboard: React.FC<HomeDashboardProps> = ({
@@ -14,7 +16,29 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
   setBedState,
   onTriggerEStop,
   onTriggerNurseCall,
+  onOpenPatientChart,
 }) => {
+  const [patientProfile, setPatientProfile] = useState<PatientProfile>(() =>
+    getPatientProfile(bedState.connectedBedId || 'ICU Bed 03')
+  );
+
+  useEffect(() => {
+    const handleProfileChange = (e: any) => {
+      if (e.detail) {
+        setPatientProfile(e.detail);
+      } else {
+        setPatientProfile(getPatientProfile(bedState.connectedBedId || 'ICU Bed 03'));
+      }
+    };
+    window.addEventListener('marq_patient_profile_changed', handleProfileChange);
+    return () => {
+      window.removeEventListener('marq_patient_profile_changed', handleProfileChange);
+    };
+  }, [bedState.connectedBedId]);
+
+  useEffect(() => {
+    setPatientProfile(getPatientProfile(bedState.connectedBedId || 'ICU Bed 03'));
+  }, [bedState.connectedBedId]);
   const holdIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   const stopHold = () => {
@@ -38,7 +62,7 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
 
   const adjustHead = (delta: number) => {
     setBedState((prev) => {
-      const next = Math.max(0, Math.min(70, prev.headAngle + delta));
+      const next = Math.max(0, Math.min(90, prev.headAngle + delta));
       return { ...prev, headAngle: next, activePreset: null };
     });
   };
@@ -47,6 +71,13 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
     setBedState((prev) => {
       const next = Math.max(0, Math.min(35, prev.kneeAngle + delta));
       return { ...prev, kneeAngle: next, activePreset: null };
+    });
+  };
+
+  const adjustTilt = (delta: number) => {
+    setBedState((prev) => {
+      const next = Math.max(-90, Math.min(90, prev.tiltAngle + delta));
+      return { ...prev, tiltAngle: next, activePreset: next !== 0 ? 'trendelenburg' : null };
     });
   };
 
@@ -137,17 +168,32 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
               </span>
             </div>
             <div className="flex flex-col">
-              <div className="flex items-center gap-1.5">
-                <span className="text-[18px] font-bold text-on-surface">
-                  {bedState.connectedBedId}
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <span className="text-[17px] font-bold text-on-surface">
+                  {bedState.connectedBedId || 'Bed Controller'}
                 </span>
-                <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[11px] font-bold">
+                <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-extrabold uppercase">
                   Active
                 </span>
+                <span
+                  className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-extrabold uppercase ${
+                    patientProfile.stability === 'Stable'
+                      ? 'bg-emerald-100 text-emerald-800'
+                      : patientProfile.stability === 'Critical'
+                      ? 'bg-red-100 text-red-800'
+                      : 'bg-amber-100 text-amber-800'
+                  }`}
+                >
+                  {patientProfile.stability}
+                </span>
               </div>
-              <span className="text-[13px] font-medium text-on-surface-variant">
-                {bedState.patientName} • {bedState.roomNumber}
-              </span>
+              <div className="flex items-center gap-1.5 text-xs text-on-surface-variant font-medium mt-0.5">
+                <span className="font-bold text-on-surface">{patientProfile.name || bedState.patientName}</span>
+                <span>•</span>
+                <span>{bedState.roomNumber}</span>
+                <span>•</span>
+                <span>{patientProfile.age}y / {patientProfile.sex}</span>
+              </div>
             </div>
           </div>
 
@@ -166,7 +212,129 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
           </div>
         </div>
 
-        <div className="flex items-center justify-between pt-2 border-t border-outline-variant/10 bg-surface-container-low px-3 py-1.5 rounded-lg">
+        {/* Patient Vitals & Mass Live Clinical Snapshot */}
+        <div className="bg-surface-container-low/70 rounded-xl p-2.5 border border-outline-variant/15 flex flex-col gap-2">
+          <div className="flex items-center justify-between text-xs">
+            <div className="flex items-center gap-1 text-on-surface font-bold">
+              <span className="material-symbols-outlined text-primary text-[16px]">
+                vital_signs
+              </span>
+              <span>Patient Vitals &amp; Mass</span>
+            </div>
+            {onOpenPatientChart && (
+              <button
+                id="btn-edit-patient-chart"
+                onClick={() => onOpenPatientChart('mass')}
+                className="text-[11px] font-extrabold text-primary hover:underline flex items-center gap-0.5 cursor-pointer"
+              >
+                <span>Edit Chart</span>
+                <span className="material-symbols-outlined text-[14px]">chevron_right</span>
+              </button>
+            )}
+          </div>
+
+          {/* Quick Metrics Bar */}
+          <div className="grid grid-cols-4 gap-1.5 text-center">
+            <div
+              onClick={() => onOpenPatientChart && onOpenPatientChart('mass')}
+              className="bg-surface-container-lowest p-1.5 rounded-lg border border-outline-variant/20 hover:border-primary/40 transition-colors cursor-pointer"
+              title="Click to view/edit mass & stability"
+            >
+              <div className="text-[9px] font-bold text-outline uppercase">Mass</div>
+              <div className="text-xs font-black text-primary">
+                {bedState.patientWeight || patientProfile.massKg} kg
+              </div>
+            </div>
+
+            <div
+              onClick={() => onOpenPatientChart && onOpenPatientChart('vitals')}
+              className="bg-surface-container-lowest p-1.5 rounded-lg border border-outline-variant/20 hover:border-primary/40 transition-colors cursor-pointer"
+              title="Click to view/edit vitals"
+            >
+              <div className="text-[9px] font-bold text-outline uppercase">Heart Rate</div>
+              <div className="text-xs font-black text-tertiary">
+                {patientProfile.vitals.heartRate} bpm
+              </div>
+            </div>
+
+            <div
+              onClick={() => onOpenPatientChart && onOpenPatientChart('vitals')}
+              className="bg-surface-container-lowest p-1.5 rounded-lg border border-outline-variant/20 hover:border-primary/40 transition-colors cursor-pointer"
+              title="Click to view/edit blood pressure"
+            >
+              <div className="text-[9px] font-bold text-outline uppercase">BP</div>
+              <div className="text-xs font-black text-indigo-700">
+                {patientProfile.vitals.bloodPressureSys}/{patientProfile.vitals.bloodPressureDia}
+              </div>
+            </div>
+
+            <div
+              onClick={() => onOpenPatientChart && onOpenPatientChart('vitals')}
+              className="bg-surface-container-lowest p-1.5 rounded-lg border border-outline-variant/20 hover:border-primary/40 transition-colors cursor-pointer"
+              title="Click to view/edit SpO2"
+            >
+              <div className="text-[9px] font-bold text-outline uppercase">SpO2</div>
+              <div className="text-xs font-black text-sky-700">
+                {patientProfile.vitals.spO2}%
+              </div>
+            </div>
+          </div>
+
+          {/* Quick Clinical Navigation Pills */}
+          {onOpenPatientChart && (
+            <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none pt-1">
+              <button
+                onClick={() => onOpenPatientChart('mass')}
+                className="px-2 py-1 rounded-md bg-surface-container hover:bg-surface-variant text-[10px] font-bold text-on-surface whitespace-nowrap flex items-center gap-1 cursor-pointer transition-colors"
+              >
+                <span className="material-symbols-outlined text-[13px] text-primary">scale</span>
+                <span>Mass &amp; Stability</span>
+              </button>
+
+              <button
+                onClick={() => onOpenPatientChart('vitals')}
+                className="px-2 py-1 rounded-md bg-surface-container hover:bg-surface-variant text-[10px] font-bold text-on-surface whitespace-nowrap flex items-center gap-1 cursor-pointer transition-colors"
+              >
+                <span className="material-symbols-outlined text-[13px] text-tertiary">ecg_heart</span>
+                <span>Vitals</span>
+              </button>
+
+              <button
+                onClick={() => onOpenPatientChart('diagnostic')}
+                className="px-2 py-1 rounded-md bg-surface-container hover:bg-surface-variant text-[10px] font-bold text-on-surface whitespace-nowrap flex items-center gap-1 cursor-pointer transition-colors"
+              >
+                <span className="material-symbols-outlined text-[13px] text-teal-700">biomedical</span>
+                <span>Reports ({patientProfile.diagnosticReports.length})</span>
+              </button>
+
+              <button
+                onClick={() => onOpenPatientChart('medication')}
+                className="px-2 py-1 rounded-md bg-surface-container hover:bg-surface-variant text-[10px] font-bold text-on-surface whitespace-nowrap flex items-center gap-1 cursor-pointer transition-colors"
+              >
+                <span className="material-symbols-outlined text-[13px] text-emerald-700">medication</span>
+                <span>Meds ({patientProfile.medications.length})</span>
+              </button>
+
+              <button
+                onClick={() => onOpenPatientChart('doctor')}
+                className="px-2 py-1 rounded-md bg-surface-container hover:bg-surface-variant text-[10px] font-bold text-on-surface whitespace-nowrap flex items-center gap-1 cursor-pointer transition-colors"
+              >
+                <span className="material-symbols-outlined text-[13px] text-primary">clinical_notes</span>
+                <span>Doctor Visits</span>
+              </button>
+
+              <button
+                onClick={() => onOpenPatientChart('emergency')}
+                className="px-2 py-1 rounded-md bg-red-50 hover:bg-red-100 text-[10px] font-bold text-red-800 whitespace-nowrap flex items-center gap-1 cursor-pointer transition-colors"
+              >
+                <span className="material-symbols-outlined text-[13px] text-red-700">e911_emergency</span>
+                <span>Emergency Notes</span>
+              </button>
+            </div>
+          )}
+        </div>
+
+        <div className="flex items-center justify-between pt-1 border-t border-outline-variant/10 bg-surface-container-low px-3 py-1.5 rounded-lg">
           <div className="flex items-center gap-1.5">
             <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
             <span className="text-[11px] text-on-surface font-bold">
@@ -208,6 +376,7 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
         headAngle={bedState.headAngle}
         overallHeight={bedState.overallHeight}
         kneeAngle={bedState.kneeAngle}
+        tiltAngle={bedState.tiltAngle}
       />
 
       {/* Section 1: Head & Knee Actuation Tiles */}
@@ -217,16 +386,16 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
         </span>
         <div className="grid grid-cols-2 gap-2.5">
           {/* Head Section Control Card */}
-          <div className="bg-surface-container-lowest rounded-xl p-3 shadow-md flex flex-col gap-2 border border-outline-variant/15">
+          <div className="bg-surface-container-lowest rounded-xl p-2.5 sm:p-3 shadow-md flex flex-col gap-1.5 sm:gap-2 border border-outline-variant/15">
             <div className="flex justify-between items-center px-1">
-              <span className="text-[13px] font-bold text-on-surface">
+              <span className="text-[12px] sm:text-[13px] font-bold text-on-surface">
                 Head Gatch
               </span>
-              <span className="text-[11px] px-1.5 py-0.5 rounded bg-surface-container text-primary font-bold">
-                0°-70°
+              <span className="text-[10px] sm:text-[11px] px-1.5 py-0.5 rounded bg-surface-container text-primary font-bold">
+                0°-90°
               </span>
             </div>
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-2 gap-1.5 sm:gap-2">
               <button
                 id="btn-head-up"
                 onMouseDown={() => startHoldAction(() => adjustHead(1))}
@@ -237,12 +406,12 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
                   startHoldAction(() => adjustHead(1));
                 }}
                 onTouchEnd={stopHold}
-                className="h-16 rounded-lg bg-surface-container flex flex-col items-center justify-center shadow-[0_4px_0_0_#dcd9d9] active:shadow-none active:translate-y-1 active:bg-primary active:text-on-primary transition-all select-none cursor-pointer"
+                className="h-[60px] sm:h-16 rounded-lg bg-surface-container flex flex-col items-center justify-center shadow-[0_3px_0_0_#dcd9d9] active:shadow-none active:translate-y-1 active:bg-primary active:text-on-primary transition-all select-none cursor-pointer"
               >
-                <span className="material-symbols-outlined text-[24px]">
+                <span className="material-symbols-outlined text-[22px] sm:text-[24px]">
                   arrow_upward
                 </span>
-                <span className="text-[11px] font-bold mt-0.5 uppercase tracking-wide">
+                <span className="text-[10px] sm:text-[11px] font-bold mt-0.5 uppercase tracking-wide">
                   Raise
                 </span>
               </button>
@@ -256,32 +425,32 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
                   startHoldAction(() => adjustHead(-1));
                 }}
                 onTouchEnd={stopHold}
-                className="h-16 rounded-lg bg-surface-container flex flex-col items-center justify-center shadow-[0_4px_0_0_#dcd9d9] active:shadow-none active:translate-y-1 active:bg-primary active:text-on-primary transition-all select-none cursor-pointer"
+                className="h-[60px] sm:h-16 rounded-lg bg-surface-container flex flex-col items-center justify-center shadow-[0_3px_0_0_#dcd9d9] active:shadow-none active:translate-y-1 active:bg-primary active:text-on-primary transition-all select-none cursor-pointer"
               >
-                <span className="material-symbols-outlined text-[24px]">
+                <span className="material-symbols-outlined text-[22px] sm:text-[24px]">
                   arrow_downward
                 </span>
-                <span className="text-[11px] font-bold mt-0.5 uppercase tracking-wide">
+                <span className="text-[10px] sm:text-[11px] font-bold mt-0.5 uppercase tracking-wide">
                   Lower
                 </span>
               </button>
             </div>
-            <span className="text-[10px] leading-none text-center text-outline uppercase font-extrabold">
+            <span className="text-[9.5px] sm:text-[10px] leading-none text-center text-outline uppercase font-extrabold">
               HOLD FOR AUTO-STOP
             </span>
           </div>
 
           {/* Knee / Foot Section Control Card */}
-          <div className="bg-surface-container-lowest rounded-xl p-3 shadow-md flex flex-col gap-2 border border-outline-variant/15">
+          <div className="bg-surface-container-lowest rounded-xl p-2.5 sm:p-3 shadow-md flex flex-col gap-1.5 sm:gap-2 border border-outline-variant/15">
             <div className="flex justify-between items-center px-1">
-              <span className="text-[13px] font-bold text-on-surface">
+              <span className="text-[12px] sm:text-[13px] font-bold text-on-surface">
                 Knee Break
               </span>
-              <span className="text-[11px] px-1.5 py-0.5 rounded bg-surface-container text-primary font-bold">
+              <span className="text-[10px] sm:text-[11px] px-1.5 py-0.5 rounded bg-surface-container text-primary font-bold">
                 0°-35°
               </span>
             </div>
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-2 gap-1.5 sm:gap-2">
               <button
                 id="btn-knee-up"
                 onMouseDown={() => startHoldAction(() => adjustKnee(1))}
@@ -292,12 +461,12 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
                   startHoldAction(() => adjustKnee(1));
                 }}
                 onTouchEnd={stopHold}
-                className="h-16 rounded-lg bg-surface-container flex flex-col items-center justify-center shadow-[0_4px_0_0_#dcd9d9] active:shadow-none active:translate-y-1 active:bg-primary active:text-on-primary transition-all select-none cursor-pointer"
+                className="h-[60px] sm:h-16 rounded-lg bg-surface-container flex flex-col items-center justify-center shadow-[0_3px_0_0_#dcd9d9] active:shadow-none active:translate-y-1 active:bg-primary active:text-on-primary transition-all select-none cursor-pointer"
               >
-                <span className="material-symbols-outlined text-[24px]">
+                <span className="material-symbols-outlined text-[22px] sm:text-[24px]">
                   arrow_upward
                 </span>
-                <span className="text-[11px] font-bold mt-0.5 uppercase tracking-wide">
+                <span className="text-[10px] sm:text-[11px] font-bold mt-0.5 uppercase tracking-wide">
                   Raise
                 </span>
               </button>
@@ -311,17 +480,17 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
                   startHoldAction(() => adjustKnee(-1));
                 }}
                 onTouchEnd={stopHold}
-                className="h-16 rounded-lg bg-surface-container flex flex-col items-center justify-center shadow-[0_4px_0_0_#dcd9d9] active:shadow-none active:translate-y-1 active:bg-primary active:text-on-primary transition-all select-none cursor-pointer"
+                className="h-[60px] sm:h-16 rounded-lg bg-surface-container flex flex-col items-center justify-center shadow-[0_3px_0_0_#dcd9d9] active:shadow-none active:translate-y-1 active:bg-primary active:text-on-primary transition-all select-none cursor-pointer"
               >
-                <span className="material-symbols-outlined text-[24px]">
+                <span className="material-symbols-outlined text-[22px] sm:text-[24px]">
                   arrow_downward
                 </span>
-                <span className="text-[11px] font-bold mt-0.5 uppercase tracking-wide">
+                <span className="text-[10px] sm:text-[11px] font-bold mt-0.5 uppercase tracking-wide">
                   Lower
                 </span>
               </button>
             </div>
-            <span className="text-[10px] leading-none text-center text-outline uppercase font-extrabold">
+            <span className="text-[9.5px] sm:text-[10px] leading-none text-center text-outline uppercase font-extrabold">
               HOLD FOR AUTO-STOP
             </span>
           </div>
@@ -329,18 +498,18 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
       </div>
 
       {/* Section 2: Height & Quick Flat / Zero-G */}
-      <div className="grid grid-cols-2 gap-2.5">
+      <div className="grid grid-cols-2 gap-2 sm:gap-2.5">
         {/* Bed Elevation Module */}
-        <div className="bg-surface-container-lowest rounded-xl p-3 shadow-md flex flex-col justify-between gap-2 border border-outline-variant/15">
+        <div className="bg-surface-container-lowest rounded-xl p-2.5 sm:p-3 shadow-md flex flex-col justify-between gap-1.5 sm:gap-2 border border-outline-variant/15">
           <div className="flex justify-between items-center px-1">
-            <span className="text-[13px] font-bold text-on-surface">
+            <span className="text-[12px] sm:text-[13px] font-bold text-on-surface">
               Bed Elevation
             </span>
-            <span className="text-[11px] px-1.5 py-0.5 rounded bg-surface-container text-secondary font-bold">
+            <span className="text-[10px] sm:text-[11px] px-1.5 py-0.5 rounded bg-surface-container text-secondary font-bold">
               40-85cm
             </span>
           </div>
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-2 gap-1.5 sm:gap-2">
             <button
               id="btn-bed-up"
               onMouseDown={() => startHoldAction(() => adjustHeight(1))}
@@ -351,12 +520,12 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
                 startHoldAction(() => adjustHeight(1));
               }}
               onTouchEnd={stopHold}
-              className="h-16 rounded-lg bg-surface-container flex flex-col items-center justify-center shadow-[0_4px_0_0_#dcd9d9] active:shadow-none active:translate-y-1 active:bg-primary active:text-on-primary transition-all select-none cursor-pointer"
+              className="h-[60px] sm:h-16 rounded-lg bg-surface-container flex flex-col items-center justify-center shadow-[0_3px_0_0_#dcd9d9] active:shadow-none active:translate-y-1 active:bg-primary active:text-on-primary transition-all select-none cursor-pointer"
             >
-              <span className="material-symbols-outlined text-[24px]">
+              <span className="material-symbols-outlined text-[22px] sm:text-[24px]">
                 vertical_align_top
               </span>
-              <span className="text-[11px] font-bold mt-0.5 uppercase tracking-wide">
+              <span className="text-[10px] sm:text-[11px] font-bold mt-0.5 uppercase tracking-wide">
                 Elevate
               </span>
             </button>
@@ -370,12 +539,12 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
                 startHoldAction(() => adjustHeight(-1));
               }}
               onTouchEnd={stopHold}
-              className="h-16 rounded-lg bg-surface-container flex flex-col items-center justify-center shadow-[0_4px_0_0_#dcd9d9] active:shadow-none active:translate-y-1 active:bg-primary active:text-on-primary transition-all select-none cursor-pointer"
+              className="h-[60px] sm:h-16 rounded-lg bg-surface-container flex flex-col items-center justify-center shadow-[0_3px_0_0_#dcd9d9] active:shadow-none active:translate-y-1 active:bg-primary active:text-on-primary transition-all select-none cursor-pointer"
             >
-              <span className="material-symbols-outlined text-[24px]">
+              <span className="material-symbols-outlined text-[22px] sm:text-[24px]">
                 vertical_align_bottom
               </span>
-              <span className="text-[11px] font-bold mt-0.5 uppercase tracking-wide">
+              <span className="text-[10px] sm:text-[11px] font-bold mt-0.5 uppercase tracking-wide">
                 Lower
               </span>
             </button>
@@ -383,45 +552,45 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
         </div>
 
         {/* Quick Return & Zero-G */}
-        <div className="bg-surface-container-lowest rounded-xl p-3 shadow-md flex flex-col justify-between gap-2 border border-outline-variant/15">
+        <div className="bg-surface-container-lowest rounded-xl p-2.5 sm:p-3 shadow-md flex flex-col justify-between gap-1.5 sm:gap-2 border border-outline-variant/15">
           <div className="flex justify-between items-center px-1">
-            <span className="text-[13px] font-bold text-on-surface">
+            <span className="text-[12px] sm:text-[13px] font-bold text-on-surface">
               Rapid Align
             </span>
-            <span className="text-[11px] font-medium text-outline">
+            <span className="text-[10px] sm:text-[11px] font-medium text-outline">
               Auto-Cycle
             </span>
           </div>
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-2 gap-1.5 sm:gap-2">
             <button
               id="btn-preset-zerog"
               onClick={setZeroG}
-              className={`h-16 rounded-lg bg-surface-container hover:bg-surface-variant flex flex-col items-center justify-center shadow-[0_4px_0_0_#dcd9d9] active:shadow-none active:translate-y-1 transition-all select-none cursor-pointer ${
+              className={`h-[60px] sm:h-16 rounded-lg bg-surface-container hover:bg-surface-variant flex flex-col items-center justify-center shadow-[0_3px_0_0_#dcd9d9] active:shadow-none active:translate-y-1 transition-all select-none cursor-pointer ${
                 bedState.activePreset === 'zerog'
                   ? 'ring-2 ring-primary bg-primary/10'
                   : ''
               }`}
             >
-              <span className="material-symbols-outlined text-[22px] text-primary">
+              <span className="material-symbols-outlined text-[20px] sm:text-[22px] text-primary">
                 airline_seat_recline_extra
               </span>
-              <span className="text-[11px] font-bold mt-0.5 text-on-surface uppercase tracking-wide">
+              <span className="text-[10px] sm:text-[11px] font-bold mt-0.5 text-on-surface uppercase tracking-wide">
                 Zero-G
               </span>
             </button>
             <button
               id="btn-preset-flat"
               onClick={setFlat}
-              className={`h-16 rounded-lg bg-surface-container hover:bg-surface-variant flex flex-col items-center justify-center shadow-[0_4px_0_0_#dcd9d9] active:shadow-none active:translate-y-1 transition-all select-none cursor-pointer ${
+              className={`h-[60px] sm:h-16 rounded-lg bg-surface-container hover:bg-surface-variant flex flex-col items-center justify-center shadow-[0_3px_0_0_#dcd9d9] active:shadow-none active:translate-y-1 transition-all select-none cursor-pointer ${
                 bedState.activePreset === 'flat'
                   ? 'ring-2 ring-primary bg-primary/10'
                   : ''
               }`}
             >
-              <span className="material-symbols-outlined text-[22px] text-on-surface-variant">
+              <span className="material-symbols-outlined text-[20px] sm:text-[22px] text-on-surface-variant">
                 horizontal_rule
               </span>
-              <span className="text-[11px] font-bold mt-0.5 text-on-surface uppercase tracking-wide">
+              <span className="text-[10px] sm:text-[11px] font-bold mt-0.5 text-on-surface uppercase tracking-wide">
                 Flat 0°
               </span>
             </button>
@@ -429,77 +598,160 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
         </div>
       </div>
 
+      {/* Section 2B: Trendelenburg Longitudinal Tilt (0° to 90°) */}
+      <div className="bg-surface-container-lowest rounded-xl p-2.5 sm:p-3 shadow-md flex flex-col gap-1.5 sm:gap-2 border border-outline-variant/15">
+        <div className="flex justify-between items-center px-1">
+          <div className="flex items-center gap-1.5">
+            <span className="material-symbols-outlined text-[17px] sm:text-[18px] text-secondary">
+              swap_vert
+            </span>
+            <span className="text-[12px] sm:text-[13px] font-bold text-on-surface">
+              Trendelenburg Tilt Plane
+            </span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="text-[10px] sm:text-[11px] px-1.5 py-0.5 rounded bg-surface-container text-secondary font-bold">
+              0°-90° Limit
+            </span>
+            <span className="text-[10.5px] sm:text-[11px] font-extrabold text-secondary tabular-nums">
+              {bedState.tiltAngle === 0
+                ? '0° Neutral'
+                : `${Math.abs(bedState.tiltAngle)}° ${bedState.tiltAngle < 0 ? 'Trendelenburg' : 'Rev. Trend'}`}
+            </span>
+          </div>
+        </div>
+        <div className="grid grid-cols-3 gap-1.5 sm:gap-2">
+          <button
+            id="btn-trend-down"
+            onMouseDown={() => startHoldAction(() => adjustTilt(-1))}
+            onMouseUp={stopHold}
+            onMouseLeave={stopHold}
+            onTouchStart={(e) => {
+              e.preventDefault();
+              startHoldAction(() => adjustTilt(-1));
+            }}
+            onTouchEnd={stopHold}
+            className="h-[52px] sm:h-14 rounded-lg bg-surface-container hover:bg-surface-variant flex flex-col items-center justify-center shadow-[0_2.5px_0_0_#dcd9d9] active:shadow-none active:translate-y-0.5 active:bg-secondary active:text-on-secondary transition-all select-none cursor-pointer"
+          >
+            <div className="flex items-center gap-1">
+              <span className="material-symbols-outlined text-[16px] sm:text-[18px] text-secondary">
+                south
+              </span>
+              <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wide">
+                Trendelenburg
+              </span>
+            </div>
+            <span className="text-[8.5px] sm:text-[9px] text-outline font-semibold">Head Down (0°-90°)</span>
+          </button>
+          <button
+            id="btn-trend-level"
+            onClick={() => adjustTilt(-bedState.tiltAngle)}
+            className="h-[52px] sm:h-14 rounded-lg bg-surface-container hover:bg-surface-variant flex flex-col items-center justify-center shadow-[0_2.5px_0_0_#dcd9d9] active:shadow-none active:translate-y-0.5 transition-all select-none cursor-pointer"
+          >
+            <span className="material-symbols-outlined text-[16px] sm:text-[18px] text-on-surface-variant">
+              horizontal_rule
+            </span>
+            <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wide text-on-surface">
+              Level 0°
+            </span>
+            <span className="text-[8.5px] sm:text-[9px] text-outline font-semibold">Reset Horizontal</span>
+          </button>
+          <button
+            id="btn-trend-up"
+            onMouseDown={() => startHoldAction(() => adjustTilt(1))}
+            onMouseUp={stopHold}
+            onMouseLeave={stopHold}
+            onTouchStart={(e) => {
+              e.preventDefault();
+              startHoldAction(() => adjustTilt(1));
+            }}
+            onTouchEnd={stopHold}
+            className="h-[52px] sm:h-14 rounded-lg bg-surface-container hover:bg-surface-variant flex flex-col items-center justify-center shadow-[0_2.5px_0_0_#dcd9d9] active:shadow-none active:translate-y-0.5 active:bg-primary active:text-on-primary transition-all select-none cursor-pointer"
+          >
+            <div className="flex items-center gap-1">
+              <span className="material-symbols-outlined text-[16px] sm:text-[18px] text-primary">
+                north
+              </span>
+              <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wide">
+                Rev. Trend
+              </span>
+            </div>
+            <span className="text-[8.5px] sm:text-[9px] text-outline font-semibold">Head Up (0°-90°)</span>
+          </button>
+        </div>
+      </div>
+
       {/* Section 3: Clinical Presets & Safety Incline */}
       <div className="flex flex-col gap-1.5">
-        <span className="text-[11px] font-extrabold text-outline uppercase tracking-wider px-1">
+        <span className="text-[10.5px] sm:text-[11px] font-extrabold text-outline uppercase tracking-wider px-1">
           Clinical Postures &amp; Profiles
         </span>
-        <div className="grid grid-cols-4 gap-2">
+        <div className="grid grid-cols-4 gap-1.5 sm:gap-2">
           {/* Cardiac Chair */}
           <button
             onClick={setCardiacChair}
-            className={`h-20 rounded-xl p-2 flex flex-col items-center justify-center text-center shadow-md relative overflow-hidden active:scale-95 transition-all cursor-pointer ${
+            className={`h-[76px] sm:h-20 rounded-xl p-1.5 sm:p-2 flex flex-col items-center justify-center text-center shadow-md relative overflow-hidden active:scale-95 transition-all cursor-pointer ${
               bedState.activePreset === 'cardiac'
                 ? 'bg-primary text-on-primary ring-2 ring-primary'
                 : 'bg-surface-container-lowest text-on-surface hover:bg-surface-container-low'
             }`}
           >
             <span
-              className={`material-symbols-outlined text-[22px] mb-1 ${
+              className={`material-symbols-outlined text-[20px] sm:text-[22px] mb-0.5 sm:mb-1 ${
                 bedState.activePreset === 'cardiac' ? 'text-on-primary' : 'text-primary'
               }`}
             >
               chair
             </span>
-            <span className="text-[11px] leading-tight font-bold">
+            <span className="text-[10px] sm:text-[11px] leading-tight font-bold">
               Cardiac Chair
             </span>
             {bedState.activePreset === 'cardiac' && (
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 mt-1" />
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 mt-0.5 sm:mt-1" />
             )}
           </button>
 
           {/* Trendelenburg with Caution Badge */}
           <button
             onClick={setTrendelenburg}
-            className={`h-20 rounded-xl p-2 flex flex-col items-center justify-center text-center shadow-md relative active:scale-95 transition-all cursor-pointer ${
+            className={`h-[76px] sm:h-20 rounded-xl p-1.5 sm:p-2 flex flex-col items-center justify-center text-center shadow-md relative active:scale-95 transition-all cursor-pointer ${
               bedState.activePreset === 'trendelenburg'
                 ? 'bg-secondary-fixed text-on-secondary-fixed ring-2 ring-secondary'
                 : 'bg-surface-container-lowest text-on-surface hover:bg-surface-container-low'
             }`}
           >
             <span className="absolute top-1 right-1 text-secondary">
-              <span className="material-symbols-outlined text-[13px]">
+              <span className="material-symbols-outlined text-[12px] sm:text-[13px]">
                 warning
               </span>
             </span>
-            <span className="material-symbols-outlined text-[22px] text-secondary mb-1">
+            <span className="material-symbols-outlined text-[20px] sm:text-[22px] text-secondary mb-0.5 sm:mb-1">
               swap_driving_apps
             </span>
-            <span className="text-[11px] leading-tight font-bold">
+            <span className="text-[10px] sm:text-[11px] leading-tight font-bold">
               Trendelenburg
             </span>
-            <span className="text-[9px] text-secondary font-bold">
-              Tilt -12°
+            <span className="text-[8.5px] sm:text-[9px] text-secondary font-bold">
+              {bedState.tiltAngle !== 0 ? `Tilt ${Math.abs(bedState.tiltAngle)}°` : '0°-90° Limit'}
             </span>
           </button>
 
           {/* Memory Preset M1 */}
           <button
             onClick={setM1Sleep}
-            className={`h-20 rounded-xl p-2 flex flex-col items-center justify-center text-center shadow-md active:scale-95 transition-all cursor-pointer ${
+            className={`h-[76px] sm:h-20 rounded-xl p-1.5 sm:p-2 flex flex-col items-center justify-center text-center shadow-md active:scale-95 transition-all cursor-pointer ${
               bedState.activePreset === 'sleep'
                 ? 'bg-primary-fixed text-on-primary-fixed ring-2 ring-primary'
                 : 'bg-surface-container-lowest text-on-surface hover:bg-surface-container-low'
             }`}
           >
-            <span className="material-symbols-outlined text-[22px] text-primary mb-1">
+            <span className="material-symbols-outlined text-[20px] sm:text-[22px] text-primary mb-0.5 sm:mb-1">
               bedtime
             </span>
-            <span className="text-[11px] leading-tight font-bold">
+            <span className="text-[10px] sm:text-[11px] leading-tight font-bold">
               M1: Sleep
             </span>
-            <span className="text-[9px] text-outline font-semibold">
+            <span className="text-[8.5px] sm:text-[9px] text-outline font-semibold">
               Head 15°
             </span>
           </button>
@@ -507,19 +759,19 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
           {/* Memory Preset M2 */}
           <button
             onClick={setM2Exam}
-            className={`h-20 rounded-xl p-2 flex flex-col items-center justify-center text-center shadow-md active:scale-95 transition-all cursor-pointer ${
+            className={`h-[76px] sm:h-20 rounded-xl p-1.5 sm:p-2 flex flex-col items-center justify-center text-center shadow-md active:scale-95 transition-all cursor-pointer ${
               bedState.activePreset === 'exam'
                 ? 'bg-primary-fixed text-on-primary-fixed ring-2 ring-primary'
                 : 'bg-surface-container-lowest text-on-surface hover:bg-surface-container-low'
             }`}
           >
-            <span className="material-symbols-outlined text-[22px] text-primary mb-1">
+            <span className="material-symbols-outlined text-[20px] sm:text-[22px] text-primary mb-0.5 sm:mb-1">
               medical_services
             </span>
-            <span className="text-[11px] leading-tight font-bold">
+            <span className="text-[10px] sm:text-[11px] leading-tight font-bold">
               M2: Exam
             </span>
-            <span className="text-[9px] text-outline font-semibold">
+            <span className="text-[8.5px] sm:text-[9px] text-outline font-semibold">
               High/Flat
             </span>
           </button>
@@ -527,28 +779,28 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
       </div>
 
       {/* Halting Emergency Strip */}
-      <div className="mt-2 w-full">
+      <div className="mt-1 sm:mt-2 w-full">
         <button
           onClick={onTriggerEStop}
           id="e-stop-bar"
-          className="w-full h-16 rounded-2xl bg-tertiary text-on-tertiary flex items-center justify-between px-4 sm:px-5 shadow-[0_6px_20px_rgba(159,0,15,0.35)] active:brightness-90 active:scale-[0.99] transition-all cursor-pointer"
+          className="w-full h-[58px] sm:h-16 rounded-2xl bg-tertiary text-on-tertiary flex items-center justify-between px-3.5 sm:px-5 shadow-[0_6px_20px_rgba(159,0,15,0.35)] active:brightness-90 active:scale-[0.99] transition-all cursor-pointer"
         >
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center shrink-0">
-              <span className="material-symbols-outlined text-[26px]">
+          <div className="flex items-center gap-2.5 sm:gap-3">
+            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-white/20 flex items-center justify-center shrink-0">
+              <span className="material-symbols-outlined text-[24px] sm:text-[26px]">
                 emergency_home
               </span>
             </div>
             <div className="flex flex-col text-left">
-              <span className="text-[16px] sm:text-[18px] font-extrabold tracking-wide leading-tight">
+              <span className="text-[15px] sm:text-[18px] font-extrabold tracking-wide leading-tight">
                 EMERGENCY STOP
               </span>
-              <span className="text-[11px] font-semibold opacity-90">
+              <span className="text-[10px] sm:text-[11px] font-semibold opacity-90">
                 Instant relay cut-off across BLE &amp; Wi-Fi
               </span>
             </div>
           </div>
-          <span className="material-symbols-outlined text-[28px]">
+          <span className="material-symbols-outlined text-[24px] sm:text-[28px]">
             pan_tool
           </span>
         </button>

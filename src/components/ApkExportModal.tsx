@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { usePWAInstall } from './usePWAInstall';
+import { MarqLogo } from './MarqLogo';
 
 interface ApkExportModalProps {
   isOpen: boolean;
@@ -71,19 +72,16 @@ jobs:
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-center justify-between pb-2 border-b border-outline-variant/15">
-          <div className="flex items-center gap-2">
-            <span className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-primary">
-              <span className="material-symbols-outlined text-[20px]">
-                android
-              </span>
-            </span>
+        <div className="flex items-center justify-between pb-2.5 border-b border-outline-variant/15">
+          <div className="flex items-center gap-2.5">
+            <MarqLogo height={24} className="text-on-surface" />
+            <div className="h-4 w-px bg-outline-variant/30" />
             <div>
-              <h2 className="text-base font-extrabold text-on-surface">
-                Android APK &amp; Hardware Pairing
+              <h2 className="text-sm font-extrabold text-on-surface">
+                Android APK &amp; Hardware
               </h2>
-              <p className="text-[11px] text-on-surface-variant">
-                Direct Bluetooth LE &amp; Local Wi-Fi connectivity
+              <p className="text-[10px] text-on-surface-variant font-medium">
+                Direct BLE &amp; Local ESP32 Wi-Fi
               </p>
             </div>
           </div>
