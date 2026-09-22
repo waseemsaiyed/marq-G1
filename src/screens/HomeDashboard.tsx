@@ -39,6 +39,145 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
   useEffect(() => {
     setPatientProfile(getPatientProfile(bedState.connectedBedId || 'ICU Bed 03'));
   }, [bedState.connectedBedId]);
+
+  // Share and Broadcast States
+  const [sharePhone, setSharePhone] = useState(() => patientProfile.emergencyNotes?.emergencyContactPhone || '+15553829912');
+  const [shareEmail, setShareEmail] = useState('attending.doctor@marq-clinical.com');
+  const [enable2HrReminder, setEnable2HrReminder] = useState(true);
+  const [reminderInterval, setReminderInterval] = useState(7200); // 2 hours in seconds
+  const [secondsLeft, setSecondsLeft] = useState(7200);
+  const [showBroadcastReminderAlert, setShowBroadcastReminderAlert] = useState(false);
+  const [lastBroadcastTime, setLastBroadcastTime] = useState<string>('Never');
+
+  // Sync state if patient profile updates
+  useEffect(() => {
+    if (patientProfile.emergencyNotes?.emergencyContactPhone) {
+      setSharePhone(patientProfile.emergencyNotes.emergencyContactPhone);
+    }
+  }, [patientProfile]);
+
+  // Visual Timer Ticker
+  useEffect(() => {
+    if (!enable2HrReminder) return;
+    
+    const interval = setInterval(() => {
+      setSecondsLeft((prev) => {
+        if (prev <= 1) {
+          setShowBroadcastReminderAlert(true);
+          // Play a gentle audible alert
+          try {
+            const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(880, ctx.currentTime);
+            gain.gain.setValueAtTime(0.15, ctx.currentTime);
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            osc.start();
+            osc.stop(ctx.currentTime + 0.15);
+            setTimeout(() => {
+              const osc2 = ctx.createOscillator();
+              osc2.type = 'sine';
+              osc2.frequency.setValueAtTime(1046.5, ctx.currentTime);
+              const gain2 = ctx.createGain();
+              gain2.gain.setValueAtTime(0.15, ctx.currentTime);
+              osc2.connect(gain2);
+              gain2.connect(ctx.destination);
+              osc2.start();
+              osc2.stop(ctx.currentTime + 0.2);
+            }, 200);
+          } catch (e) {
+            console.log('Audio Blocked', e);
+          }
+          return reminderInterval;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    
+    return () => clearInterval(interval);
+  }, [enable2HrReminder, reminderInterval]);
+
+  const formatTime = (secs: number) => {
+    const h = Math.floor(secs / 3600);
+    const m = Math.floor((secs % 3600) / 60);
+    const s = secs % 60;
+    return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+  };
+
+  const formatReport = () => {
+    const stabilityEmoji = patientProfile.stability === 'Stable' ? '🟢' : patientProfile.stability === 'Critical' ? '🔴' : '🟡';
+    const vitals = patientProfile.vitals;
+    const nowStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+    let text = `📋 *MARQ W-1 CLINICAL BEDSIDE BROADCAST*\n`;
+    text += `------------------------------------\n`;
+    text += `🏥 *Bed/Location:* ${patientProfile.bedId} (${bedState.roomNumber || 'Room 412'})\n`;
+    text += `👤 *Patient:* ${patientProfile.name} (${patientProfile.sex}, ${patientProfile.age} yrs)\n`;
+    text += `🆔 *MRN:* ${patientProfile.mrn}  |  🩸 *Blood:* ${patientProfile.bloodType}\n`;
+    text += `⚖️ *Current Weight:* ${bedState.patientWeight || patientProfile.massKg} kg\n`;
+    text += `${stabilityEmoji} *Stability Status:* ${patientProfile.stability}\n\n`;
+
+    text += `📈 *LATEST CLINICAL VITALS (${vitals.recordedAt || 'Recent'}):*\n`;
+    text += `• Heart Rate: ${vitals.heartRate} bpm\n`;
+    text += `• Blood Pressure: ${vitals.bloodPressureSys}/${vitals.bloodPressureDia} mmHg\n`;
+    text += `• SpO2 (Oxygen Sat): ${vitals.spO2}%\n`;
+    text += `• Resp Rate: ${vitals.respiratoryRate} bpm\n`;
+    text += `• Temp: ${vitals.temperatureC}°C\n`;
+    text += `• Pain Score: ${vitals.painScore}/10\n\n`;
+
+    if (patientProfile.diagnosticReports && patientProfile.diagnosticReports.length > 0) {
+      text += `🔬 *DIAGNOSTIC REPORTS:* \n`;
+      patientProfile.diagnosticReports.slice(0, 2).forEach(r => {
+        const statusEmoji = r.status === 'Normal' ? '✅' : r.status === 'Critical' ? '🚨' : '⚠️';
+        text += `• [${r.category}] ${r.title}: ${r.summary} (${statusEmoji} ${r.status})\n`;
+      });
+      text += `\n`;
+    }
+
+    if (patientProfile.medications && patientProfile.medications.length > 0) {
+      text += `💊 *ACTIVE MEDICATIONS:*\n`;
+      patientProfile.medications.slice(0, 2).forEach(m => {
+        text += `• ${m.name} (${m.dosage}, ${m.route}) - ${m.frequency}\n`;
+      });
+      text += `\n`;
+    }
+
+    text += `⚙️ *MARQ W-1 Bed Settings:*\n`;
+    text += `• Head Angle: ${bedState.headAngle}°\n`;
+    text += `• Knee Angle: ${bedState.kneeAngle}°\n`;
+    text += `• Bed Height: ${bedState.overallHeight} cm\n\n`;
+
+    text += `🕒 Broadcast generated at ${nowStr}. Broadcast interval set to every 2 hours.`;
+    return text;
+  };
+
+  const triggerWhatsApp = () => {
+    const text = formatReport();
+    const cleanedPhone = sharePhone.replace(/[^\d+]/g, '');
+    const url = `https://api.whatsapp.com/send?phone=${encodeURIComponent(cleanedPhone)}&text=${encodeURIComponent(text)}`;
+    window.open(url, '_blank');
+    
+    const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + ', ' + new Date().toLocaleDateString([], { month: 'short', day: 'numeric' });
+    setLastBroadcastTime(timeStr);
+    setSecondsLeft(reminderInterval);
+    setShowBroadcastReminderAlert(false);
+  };
+
+  const triggerEmail = () => {
+    const text = formatReport();
+    const plainText = text.replace(/\*/g, '');
+    const subject = `MARQ W-1 Clinical Telemetry Broadcast: ${patientProfile.name} (${patientProfile.bedId})`;
+    const url = `mailto:${shareEmail}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(plainText)}`;
+    window.open(url, '_blank');
+
+    const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + ', ' + new Date().toLocaleDateString([], { month: 'short', day: 'numeric' });
+    setLastBroadcastTime(timeStr);
+    setSecondsLeft(reminderInterval);
+    setShowBroadcastReminderAlert(false);
+  };
+
   const holdIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   const stopHold = () => {
@@ -349,6 +488,205 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
             <span className="text-[11px] font-bold">
               Guard Actuators Active
             </span>
+          </div>
+        </div>
+      </div>
+
+      {/* Direct Clinical Telemetry & Broadcaster Card (Email & WhatsApp) */}
+      <div className="bg-surface-container-lowest rounded-xl p-4 shadow-md border border-outline-variant/15 flex flex-col gap-3.5 relative overflow-hidden">
+        {/* Card Header */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-lg bg-emerald-500/10 text-emerald-700 flex items-center justify-center">
+              <span className="material-symbols-outlined text-[20px]">share</span>
+            </div>
+            <div>
+              <h4 className="text-sm font-extrabold text-on-surface">
+                MARQ W-1 Clinical Telemetry Broadcast
+              </h4>
+              <p className="text-[10px] text-outline font-semibold">
+                Direct WhatsApp &amp; Email Doctor/Family Updates
+              </p>
+            </div>
+          </div>
+          <span className="text-[9px] font-extrabold uppercase px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-800 tracking-wider">
+            Broadcaster v1.2
+          </span>
+        </div>
+
+        {/* 2-Hour Share Countdown Tracker */}
+        <div className="bg-surface-container/60 rounded-xl p-3 border border-outline-variant/10 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5">
+            <div className="w-9 h-9 rounded-full bg-primary/10 text-primary flex items-center justify-center shrink-0">
+              <span className={`material-symbols-outlined text-[20px] ${enable2HrReminder ? 'animate-spin' : ''}`} style={{ animationDuration: '6s' }}>
+                schedule
+              </span>
+            </div>
+            <div>
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs font-bold text-on-surface">
+                  2-Hour Broadcast Scheduler
+                </span>
+                <span className={`text-[8.5px] font-extrabold px-1 py-0.2 rounded uppercase ${enable2HrReminder ? 'bg-emerald-500/15 text-emerald-800' : 'bg-outline-variant/20 text-outline'}`}>
+                  {enable2HrReminder ? 'ACTIVE' : 'MUTED'}
+                </span>
+              </div>
+              <p className="text-[10px] text-on-surface-variant font-medium leading-tight">
+                Recommended clinical frequency of update broadcasts.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex flex-col items-end shrink-0">
+            <div className="text-[13px] font-black font-mono text-primary tabular-nums">
+              {enable2HrReminder ? formatTime(secondsLeft) : '--:--:--'}
+            </div>
+            <span className="text-[9px] text-outline font-semibold">
+              Next schedule alert
+            </span>
+          </div>
+        </div>
+
+        {/* Broadcast Reminder Alert Pop-up */}
+        {showBroadcastReminderAlert && (
+          <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-3 flex flex-col gap-2 animate-in slide-in-from-top-1 duration-200">
+            <div className="flex items-start gap-2">
+              <span className="material-symbols-outlined text-amber-600 text-[20px] shrink-0 animate-pulse mt-0.5">
+                notifications_active
+              </span>
+              <div className="flex-1">
+                <span className="text-xs font-black text-amber-800 leading-none">
+                  2-Hour Interval Elapsed
+                </span>
+                <p className="text-[10px] text-on-surface-variant font-medium mt-0.5 leading-tight">
+                  Please broadcast the current vitals, medications and clinical reports log immediately to ensure continuous clinical alignment.
+                </p>
+              </div>
+            </div>
+            <div className="flex gap-2 justify-end">
+              <button
+                onClick={() => {
+                  setSecondsLeft(reminderInterval);
+                  setShowBroadcastReminderAlert(false);
+                }}
+                className="px-2.5 py-1 text-[10px] font-bold text-on-surface-variant hover:bg-surface-container rounded-md cursor-pointer transition-colors"
+              >
+                Mute Alert
+              </button>
+              <button
+                onClick={() => {
+                  triggerWhatsApp();
+                }}
+                className="px-3 py-1 bg-amber-600 text-white text-[10px] font-black rounded-md flex items-center gap-1 cursor-pointer hover:bg-amber-700 active:scale-95 transition-all shadow-2xs"
+              >
+                <span className="material-symbols-outlined text-[13px]">share</span>
+                <span>Send WhatsApp Now</span>
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Share Recipient Details Form */}
+        <div className="grid grid-cols-2 gap-2.5">
+          <div className="flex flex-col gap-1">
+            <label className="text-[10.5px] font-bold text-on-surface-variant flex items-center gap-1">
+              <span className="material-symbols-outlined text-[14px] text-emerald-600">call</span>
+              <span>WhatsApp Recipient</span>
+            </label>
+            <input
+              type="text"
+              value={sharePhone}
+              onChange={(e) => setSharePhone(e.target.value)}
+              placeholder="Phone (e.g. +15553829912)"
+              className="p-2 text-xs rounded-lg border border-outline-variant/40 bg-surface-container/30 focus:outline-primary font-bold text-on-surface"
+            />
+          </div>
+
+          <div className="flex flex-col gap-1">
+            <label className="text-[10.5px] font-bold text-on-surface-variant flex items-center gap-1">
+              <span className="material-symbols-outlined text-[14px] text-primary">mail</span>
+              <span>Email Recipient</span>
+            </label>
+            <input
+              type="email"
+              value={shareEmail}
+              onChange={(e) => setShareEmail(e.target.value)}
+              placeholder="Doctor's email"
+              className="p-2 text-xs rounded-lg border border-outline-variant/40 bg-surface-container/30 focus:outline-primary font-bold text-on-surface"
+            />
+          </div>
+        </div>
+
+        {/* Share Action Buttons */}
+        <div className="grid grid-cols-2 gap-2.5">
+          {/* WhatsApp Button */}
+          <button
+            onClick={triggerWhatsApp}
+            className="h-[44px] rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white flex items-center justify-center gap-1.5 shadow-[0_4px_12px_rgba(16,185,129,0.2)] transition-all cursor-pointer font-bold text-xs"
+          >
+            <svg className="w-5 h-5 fill-white shrink-0" viewBox="0 0 24 24">
+              <path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946C.06 5.348 5.397.01 12.008.01c3.202.001 6.212 1.246 8.477 3.514 2.266 2.268 3.507 5.28 3.505 8.484-.004 6.657-5.34 11.997-11.953 11.997-2.005-.001-3.973-.502-5.717-1.455L0 24zm6.59-4.846c1.6.95 3.188 1.449 4.825 1.451 5.436 0 9.86-4.37 9.864-9.742.002-2.602-1.005-5.05-2.834-6.88C16.671 2.152 14.225.992 11.64.992 6.208.992 1.782 5.362 1.778 10.733c-.001 1.639.453 3.21 1.312 4.6l-.993 3.629 3.73-.974h.22z" />
+            </svg>
+            <span>Broadcast WhatsApp</span>
+          </button>
+
+          {/* Email Button */}
+          <button
+            onClick={triggerEmail}
+            className="h-[44px] rounded-xl bg-primary hover:bg-primary-container active:scale-95 text-white flex items-center justify-center gap-1.5 shadow-[0_4px_12px_rgba(0,79,140,0.2)] transition-all cursor-pointer font-bold text-xs"
+          >
+            <span className="material-symbols-outlined text-[20px]">
+              mail
+            </span>
+            <span>Broadcast Email</span>
+          </button>
+        </div>
+
+        {/* Scheduler Controls Footer */}
+        <div className="flex items-center justify-between pt-1.5 border-t border-outline-variant/10 text-[11px] gap-1 flex-wrap">
+          <div className="flex items-center gap-1 text-on-surface-variant font-medium flex-wrap">
+            <span className="font-bold">Timer Controls:</span>
+            <button
+              type="button"
+              onClick={() => {
+                setEnable2HrReminder(!enable2HrReminder);
+                setSecondsLeft(reminderInterval);
+              }}
+              className="px-1.5 py-0.5 rounded bg-surface-container hover:bg-surface-variant text-[10px] font-black uppercase text-primary transition-colors cursor-pointer"
+            >
+              {enable2HrReminder ? 'Pause Timer' : 'Resume Timer'}
+            </button>
+            <span className="text-outline">|</span>
+            <button
+              type="button"
+              onClick={() => {
+                setReminderInterval(7200);
+                setSecondsLeft(7200);
+                setEnable2HrReminder(true);
+                setShowBroadcastReminderAlert(false);
+              }}
+              className="text-primary font-bold hover:underline"
+            >
+              Reset to 2hr
+            </button>
+            <span className="text-outline">|</span>
+            <button
+              type="button"
+              onClick={() => {
+                setReminderInterval(15);
+                setSecondsLeft(15);
+                setEnable2HrReminder(true);
+                setShowBroadcastReminderAlert(false);
+              }}
+              className="text-tertiary font-bold hover:underline"
+              title="Set to 15 seconds for testing the reminder pop-up alert."
+            >
+              Test (15s)
+            </button>
+          </div>
+
+          <div className="text-outline font-semibold">
+            Last sent: <span className="font-bold text-on-surface">{lastBroadcastTime}</span>
           </div>
         </div>
       </div>

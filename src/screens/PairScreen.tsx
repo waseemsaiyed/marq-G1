@@ -45,6 +45,9 @@ export const PairScreen: React.FC<PairScreenProps> = ({
   const [wifiScanProgress, setWifiScanProgress] = useState<string | null>(null);
   const [isWifiScanning, setIsWifiScanning] = useState(false);
 
+  // Chipset Compatibility (Legacy / Multi-version BLE 4.0 & 5.x) State
+  const [legacyMode, setLegacyMode] = useState(false);
+
   // Direct IP Form State
   const [manualIp, setManualIp] = useState('192.168.4.1');
   const [manualPort, setManualPort] = useState('80');
@@ -121,7 +124,8 @@ export const PairScreen: React.FC<PairScreenProps> = ({
           },
           (status: ScanStatus) => {
             setScanMessage(status.message);
-          }
+          },
+          legacyMode
         );
         setIsScanning(false);
         return;
@@ -214,7 +218,8 @@ export const PairScreen: React.FC<PairScreenProps> = ({
           },
           (status: ScanStatus) => {
             setBleStatus(status.message);
-          }
+          },
+          legacyMode
         );
         setIsScanning(false);
         return;
@@ -231,7 +236,7 @@ export const PairScreen: React.FC<PairScreenProps> = ({
     if (hasWebBle) {
       try {
         setBleStatus('Opening browser Bluetooth device selector...');
-        const found = await scanWebBluetooth();
+        const found = await scanWebBluetooth(legacyMode);
         if (found) {
           const foundBed: DeviceItem = {
             id: found.name || 'Bluetooth Bed ' + found.id.slice(0, 4),
@@ -731,6 +736,81 @@ export const PairScreen: React.FC<PairScreenProps> = ({
               </span>
               Pair via Bluetooth
             </button>
+          </div>
+
+          {/* Chipset & Universal Mobile Compatibility Control Panel */}
+          <div className="bg-surface-container-lowest border border-outline-variant/15 rounded-xl p-3.5 shadow-xs flex flex-col gap-3">
+            <div className="flex items-center justify-between pb-2 border-b border-outline-variant/10">
+              <div className="flex items-center gap-1.5">
+                <span className="material-symbols-outlined text-[18px] text-primary">
+                  settings_suggest
+                </span>
+                <span className="text-[12px] font-extrabold text-on-surface">
+                  Universal Chipset &amp; OS Compatibility
+                </span>
+              </div>
+              <span className="text-[9px] font-extrabold px-1.5 py-0.5 rounded bg-primary/10 text-primary tracking-wider">
+                COMPATIBILITY AUTO-TUNING
+              </span>
+            </div>
+
+            {/* Legacy BLE Toggle */}
+            <div className="flex items-start justify-between gap-3 bg-surface-container/30 p-2.5 rounded-lg border border-outline-variant/5">
+              <div className="flex-1">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs font-bold text-on-surface">
+                    Legacy BLE Sniffer Mode (BLE 4.0+)
+                  </span>
+                  <span className="text-[8.5px] font-black bg-amber-500/10 text-amber-800 px-1 rounded uppercase">
+                    Max Stability
+                  </span>
+                </div>
+                <p className="text-[10px] text-on-surface-variant font-medium mt-0.5 leading-relaxed">
+                  Bypasses default Bluetooth OS caching and strict advertising prefixes. Turn ON if using older chipsets (MediaTek, Exynos, or older Qualcomm Snapdragon models).
+                </p>
+              </div>
+              <label className="relative inline-flex items-center cursor-pointer select-none mt-1 shrink-0">
+                <input
+                  type="checkbox"
+                  checked={legacyMode}
+                  onChange={(e) => setLegacyMode(e.target.checked)}
+                  className="sr-only peer"
+                />
+                <div className="w-9 h-5 bg-outline-variant rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-primary" />
+              </label>
+            </div>
+
+            {/* Expandable Troubleshooter / Guide */}
+            <details className="group cursor-pointer">
+              <summary className="flex items-center justify-between text-xs font-extrabold text-primary select-none hover:underline outline-none">
+                <div className="flex items-center gap-1">
+                  <span className="material-symbols-outlined text-[16px] group-open:rotate-90 transition-transform">
+                    chevron_right
+                  </span>
+                  <span>View Cross-Generation Mobile Setup Guide</span>
+                </div>
+              </summary>
+              <div className="mt-2.5 p-3 rounded-lg bg-surface-container/40 border border-outline-variant/10 text-[11px] leading-relaxed flex flex-col gap-2.5 cursor-default">
+                <div>
+                  <span className="font-extrabold text-on-surface block">Older Android Devices (Android 6.0 to 11):</span>
+                  <p className="text-on-surface-variant font-medium mt-0.5">
+                    Requires <strong className="text-on-surface">Location Services (GPS)</strong> to be turned ON, and the <strong className="text-on-surface">Access Fine Location</strong> permission granted, otherwise BLE beacons will be blank.
+                  </p>
+                </div>
+                <div>
+                  <span className="font-extrabold text-on-surface block">Newer Android Devices (Android 12, 13, 14+):</span>
+                  <p className="text-on-surface-variant font-medium mt-0.5">
+                    Requires <strong className="text-on-surface">Nearby Devices (Bluetooth Scan &amp; Connect)</strong> permission. You do not need to keep Location Services toggled on for these chipsets.
+                  </p>
+                </div>
+                <div>
+                  <span className="font-extrabold text-on-surface block">iOS &amp; Web Safari Fallback:</span>
+                  <p className="text-on-surface-variant font-medium mt-0.5">
+                    To connect via Wi-Fi IP in iOS, ensure you authorize <strong className="text-on-surface">Local Network Permission</strong>. iOS does not support Web Bluetooth in default Safari; compile to the native APK or use our rapid Wi-Fi/LAN gateway sweep.
+                  </p>
+                </div>
+              </div>
+            </details>
           </div>
         </>
       )}

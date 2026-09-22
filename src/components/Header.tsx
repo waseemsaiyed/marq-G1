@@ -54,14 +54,13 @@ export const Header: React.FC<HeaderProps> = ({
   };
 
   return (
-    <header className="fixed top-0 w-full z-50 pt-safe bg-surface-container-lowest/95 backdrop-blur-xl shadow-[0_1px_8px_rgba(0,0,0,0.04)] transition-all duration-200">
+    <header className="fixed top-0 left-0 right-0 w-full z-[100] pt-safe bg-surface-container-lowest border-b border-outline-variant/15 shadow-sm transition-all duration-200">
       <div className="px-3 sm:px-5 flex flex-col gap-1.5 sm:gap-2 py-1.5 sm:py-2 max-w-lg mx-auto">
         {/* Top Action Row */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-1.5 sm:gap-2">
-            <div className="flex items-center gap-1.5" title="MarQ Smart Hospital Bed Controls">
-              <MarqLogo height={23} className="sm:hidden text-on-surface hover:opacity-95 transition-opacity" />
-              <MarqLogo height={26} className="hidden sm:block text-on-surface hover:opacity-95 transition-opacity" />
+            <div className="flex items-center gap-1.5" title="MARQ W-1 Smart Hospital Bed Controls">
+              <MarqLogo height={24} className="text-on-surface hover:opacity-95 transition-opacity" />
             </div>
             <span className="text-outline-variant text-[13px] sm:text-[14px]">/</span>
             <div className="relative">
