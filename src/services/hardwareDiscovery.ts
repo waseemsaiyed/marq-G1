@@ -8,7 +8,7 @@
  */
 
 import { BleClient, ScanResult } from '@capacitor-community/bluetooth-le';
-import { BluetoothSerial } from '@capacitor-community/bluetooth-serial';
+import { BluetoothSerial } from '@e-is/capacitor-bluetooth-serial';
 
 export interface DiscoveredController {
   id: string;
@@ -57,10 +57,9 @@ export function isWebBluetoothSupported(): boolean {
 }
 
 /**
- * Lists already-bonded Classic Bluetooth (SPP) devices — this is how
- * CM41M_BT is found. Classic Bluetooth has no "nearby scan" comparable
- * to BLE; the device must be paired in Android system Settings first,
- * then it shows up here as bonded.
+ * Scans for Classic Bluetooth (SPP) devices — this is how CM41M_BT is
+ * found. The plugin's scan() surfaces nearby/known devices; connecting
+ * to an unpaired one triggers Android's native pairing dialog automatically.
  */
 export async function scanClassicBluetoothBonded(
   onDeviceFound: (device: DiscoveredController) => void,
@@ -70,7 +69,7 @@ export async function scanClassicBluetoothBonded(
     onStatusUpdate({
       isScanning: true,
       engine: 'classic-bt',
-      message: 'Checking Classic Bluetooth (paired devices)...',
+      message: 'Scanning for Classic Bluetooth devices...',
     });
 
     const { enabled } = await BluetoothSerial.isEnabled();
@@ -81,20 +80,19 @@ export async function scanClassicBluetoothBonded(
         message: 'Bluetooth is OFF. Requesting activation...',
         bluetoothEnabled: false,
       });
-      try {
-        await BluetoothSerial.enable();
-      } catch {
+      const { enabled: nowEnabled } = await BluetoothSerial.enable();
+      if (!nowEnabled) {
         throw new Error('Bluetooth activation denied. Please turn on Bluetooth manually.');
       }
     }
 
-    const { devices } = await BluetoothSerial.list();
+    const { devices } = await BluetoothSerial.scan();
 
     if (!devices || devices.length === 0) {
       onStatusUpdate({
         isScanning: false,
         engine: 'idle',
-        message: 'No paired Bluetooth devices found. Pair "CM41M_BT" in Android Settings > Bluetooth first.',
+        message: 'No Classic Bluetooth devices found nearby.',
         bluetoothEnabled: true,
       });
       return;
@@ -106,11 +104,11 @@ export async function scanClassicBluetoothBonded(
         name: d.name || 'CM41M_BT',
         mac: d.address,
         type: 'classic-bt',
-        signal: 'Bonded (Classic BT)',
+        signal: 'Classic Bluetooth (SPP)',
         rssi: -40,
         battery: '100%',
         isBonded: true,
-        statusText: 'Paired — Classic Bluetooth (SPP)',
+        statusText: 'Classic Bluetooth (SPP) — tap to connect',
         room: 'Local Bedside',
         patient: 'Detected Patient',
       };
@@ -120,7 +118,7 @@ export async function scanClassicBluetoothBonded(
     onStatusUpdate({
       isScanning: false,
       engine: 'idle',
-      message: `Found ${devices.length} paired Bluetooth device(s).`,
+      message: `Found ${devices.length} Classic Bluetooth device(s).`,
       bluetoothEnabled: true,
       permissionsGranted: true,
     });
