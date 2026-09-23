@@ -2,6 +2,8 @@ import React, { useRef, useEffect, useState } from 'react';
 import { BedState, PatientProfile } from '../types';
 import { BedVisualizer } from '../components/BedVisualizer';
 import { getPatientProfile } from '../services/patientStorage';
+import { getContactDetails, ContactDetails } from '../services/contactStorage';
+import { esp32Bridge } from '../services/esp32HardwareBridge';
 
 interface HomeDashboardProps {
   bedState: BedState;
@@ -41,20 +43,47 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
   }, [bedState.connectedBedId]);
 
   // Share and Broadcast States
-  const [sharePhone, setSharePhone] = useState(() => patientProfile.emergencyNotes?.emergencyContactPhone || '+15553829912');
-  const [shareEmail, setShareEmail] = useState('attending.doctor@marq-clinical.com');
+  const [contacts, setContacts] = useState<ContactDetails>(() => getContactDetails());
+  const [recipientType, setRecipientType] = useState<'doctor' | 'family'>('doctor');
+  const [sharePhone, setSharePhone] = useState(() => contacts.doctorPhone);
+  const [shareEmail, setShareEmail] = useState(() => contacts.doctorEmail);
   const [enable2HrReminder, setEnable2HrReminder] = useState(true);
   const [reminderInterval, setReminderInterval] = useState(7200); // 2 hours in seconds
   const [secondsLeft, setSecondsLeft] = useState(7200);
   const [showBroadcastReminderAlert, setShowBroadcastReminderAlert] = useState(false);
   const [lastBroadcastTime, setLastBroadcastTime] = useState<string>('Never');
 
-  // Sync state if patient profile updates
+  // Sync state if patient profile or global contacts updates
   useEffect(() => {
-    if (patientProfile.emergencyNotes?.emergencyContactPhone) {
-      setSharePhone(patientProfile.emergencyNotes.emergencyContactPhone);
+    const handleContactsChange = (e: any) => {
+      if (e.detail) {
+        const updated = e.detail as ContactDetails;
+        setContacts(updated);
+        if (recipientType === 'doctor') {
+          setSharePhone(updated.doctorPhone);
+          setShareEmail(updated.doctorEmail);
+        } else {
+          setSharePhone(updated.familyContactPhone);
+          setShareEmail(updated.familyContactEmail);
+        }
+      }
+    };
+    window.addEventListener('marq_contacts_changed', handleContactsChange);
+    return () => {
+      window.removeEventListener('marq_contacts_changed', handleContactsChange);
+    };
+  }, [recipientType]);
+
+  // Handle switching recipient types
+  useEffect(() => {
+    if (recipientType === 'doctor') {
+      setSharePhone(contacts.doctorPhone);
+      setShareEmail(contacts.doctorEmail);
+    } else {
+      setSharePhone(contacts.familyContactPhone);
+      setShareEmail(contacts.familyContactEmail);
     }
-  }, [patientProfile]);
+  }, [recipientType, contacts]);
 
   // Visual Timer Ticker
   useEffect(() => {
@@ -185,6 +214,8 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
       clearInterval(holdIntervalRef.current);
       holdIntervalRef.current = null;
     }
+    // Send safety stop to ESP32 controller
+    esp32Bridge.sendActuatorCommand({ actuator: 'all', action: 'stop' });
   };
 
   useEffect(() => {
@@ -200,6 +231,10 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
   };
 
   const adjustHead = (delta: number) => {
+    esp32Bridge.sendActuatorCommand({
+      actuator: 'head',
+      action: delta > 0 ? 'up' : 'down',
+    });
     setBedState((prev) => {
       const next = Math.max(0, Math.min(90, prev.headAngle + delta));
       return { ...prev, headAngle: next, activePreset: null };
@@ -207,6 +242,10 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
   };
 
   const adjustKnee = (delta: number) => {
+    esp32Bridge.sendActuatorCommand({
+      actuator: 'knee',
+      action: delta > 0 ? 'up' : 'down',
+    });
     setBedState((prev) => {
       const next = Math.max(0, Math.min(35, prev.kneeAngle + delta));
       return { ...prev, kneeAngle: next, activePreset: null };
@@ -214,6 +253,10 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
   };
 
   const adjustTilt = (delta: number) => {
+    esp32Bridge.sendActuatorCommand({
+      actuator: 'tilt',
+      action: delta > 0 ? 'up' : 'down',
+    });
     setBedState((prev) => {
       const next = Math.max(-90, Math.min(90, prev.tiltAngle + delta));
       return { ...prev, tiltAngle: next, activePreset: next !== 0 ? 'trendelenburg' : null };
@@ -221,6 +264,10 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
   };
 
   const adjustHeight = (delta: number) => {
+    esp32Bridge.sendActuatorCommand({
+      actuator: 'height',
+      action: delta > 0 ? 'up' : 'down',
+    });
     setBedState((prev) => {
       const next = Math.max(40, Math.min(85, prev.overallHeight + delta));
       return { ...prev, overallHeight: next, activePreset: null };
@@ -228,6 +275,7 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
   };
 
   const setZeroG = () => {
+    esp32Bridge.sendActuatorCommand({ actuator: 'all', action: 'zerog' });
     setBedState((prev) => ({
       ...prev,
       headAngle: 30,
@@ -237,6 +285,7 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
   };
 
   const setFlat = () => {
+    esp32Bridge.sendActuatorCommand({ actuator: 'all', action: 'flat' });
     setBedState((prev) => ({
       ...prev,
       headAngle: 0,
@@ -246,6 +295,7 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
   };
 
   const setCardiacChair = () => {
+    esp32Bridge.sendActuatorCommand({ actuator: 'all', action: 'cardiac' });
     setBedState((prev) => ({
       ...prev,
       headAngle: 55,
@@ -256,6 +306,7 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
   };
 
   const setTrendelenburg = () => {
+    esp32Bridge.sendActuatorCommand({ actuator: 'all', action: 'trendelenburg' });
     setBedState((prev) => ({
       ...prev,
       headAngle: 0,
@@ -587,33 +638,73 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
         )}
 
         {/* Share Recipient Details Form */}
-        <div className="grid grid-cols-2 gap-2.5">
-          <div className="flex flex-col gap-1">
-            <label className="text-[10.5px] font-bold text-on-surface-variant flex items-center gap-1">
-              <span className="material-symbols-outlined text-[14px] text-emerald-600">call</span>
-              <span>WhatsApp Recipient</span>
-            </label>
-            <input
-              type="text"
-              value={sharePhone}
-              onChange={(e) => setSharePhone(e.target.value)}
-              placeholder="Phone (e.g. +15553829912)"
-              className="p-2 text-xs rounded-lg border border-outline-variant/40 bg-surface-container/30 focus:outline-primary font-bold text-on-surface"
-            />
+        <div className="flex flex-col gap-2 bg-surface-container/20 p-2.5 rounded-xl border border-outline-variant/5">
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] font-black uppercase tracking-wider text-on-surface-variant">
+              Recipient Contact
+            </span>
+            <div className="flex bg-surface-container rounded-lg p-0.5 border border-outline-variant/10">
+              <button
+                type="button"
+                onClick={() => setRecipientType('doctor')}
+                className={`px-2 py-0.5 text-[9.5px] font-extrabold rounded-md cursor-pointer transition-all ${
+                  recipientType === 'doctor'
+                    ? 'bg-primary text-on-primary shadow-2xs'
+                    : 'text-on-surface-variant hover:bg-surface-variant/40'
+                }`}
+              >
+                🩺 Doctor
+              </button>
+              <button
+                type="button"
+                onClick={() => setRecipientType('family')}
+                className={`px-2 py-0.5 text-[9.5px] font-extrabold rounded-md cursor-pointer transition-all ${
+                  recipientType === 'family'
+                    ? 'bg-primary text-on-primary shadow-2xs'
+                    : 'text-on-surface-variant hover:bg-surface-variant/40'
+                }`}
+              >
+                🏠 Family
+              </button>
+            </div>
           </div>
 
-          <div className="flex flex-col gap-1">
-            <label className="text-[10.5px] font-bold text-on-surface-variant flex items-center gap-1">
-              <span className="material-symbols-outlined text-[14px] text-primary">mail</span>
-              <span>Email Recipient</span>
-            </label>
-            <input
-              type="email"
-              value={shareEmail}
-              onChange={(e) => setShareEmail(e.target.value)}
-              placeholder="Doctor's email"
-              className="p-2 text-xs rounded-lg border border-outline-variant/40 bg-surface-container/30 focus:outline-primary font-bold text-on-surface"
-            />
+          <div className="grid grid-cols-2 gap-2">
+            <div className="flex flex-col gap-1">
+              <label className="text-[9.5px] font-bold text-on-surface-variant flex items-center gap-1">
+                <span className="material-symbols-outlined text-[13px] text-emerald-600">call</span>
+                <span>{recipientType === 'doctor' ? 'Doctor Phone' : 'Family Phone'}</span>
+              </label>
+              <input
+                type="text"
+                value={sharePhone}
+                onChange={(e) => setSharePhone(e.target.value)}
+                placeholder="Phone (e.g. +15553829912)"
+                className="p-2 text-xs rounded-lg border border-outline-variant/40 bg-surface-container/30 focus:outline-primary font-bold text-on-surface"
+              />
+            </div>
+
+            <div className="flex flex-col gap-1">
+              <label className="text-[9.5px] font-bold text-on-surface-variant flex items-center gap-1">
+                <span className="material-symbols-outlined text-[13px] text-primary">mail</span>
+                <span>{recipientType === 'doctor' ? 'Doctor Email' : 'Family Email'}</span>
+              </label>
+              <input
+                type="email"
+                value={shareEmail}
+                onChange={(e) => setShareEmail(e.target.value)}
+                placeholder="Email address"
+                className="p-2 text-xs rounded-lg border border-outline-variant/40 bg-surface-container/30 focus:outline-primary font-bold text-on-surface"
+              />
+            </div>
+          </div>
+
+          <div className="text-[10px] text-outline leading-none font-semibold">
+            {recipientType === 'doctor' ? (
+              <span>Currently sending to: <strong className="text-on-surface-variant">{contacts.doctorName}</strong> (Attending Physician)</span>
+            ) : (
+              <span>Currently sending to: <strong className="text-on-surface-variant">{contacts.familyContactName}</strong> ({contacts.familyContactRelation})</span>
+            )}
           </div>
         </div>
 

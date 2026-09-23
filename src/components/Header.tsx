@@ -69,6 +69,11 @@ export const Header: React.FC<HeaderProps> = ({
                 onClick={() => setShowBedMenu(!showBedMenu)}
                 className="flex items-center gap-1 px-2 sm:px-2.5 py-0.5 sm:py-1 rounded-full bg-surface-container hover:bg-surface-variant transition-colors min-h-[28px] sm:min-h-[32px] cursor-pointer"
               >
+                {bedState.bleSynced && (
+                  <span className="material-symbols-outlined text-[14px] text-primary" title="Bluetooth Linked">
+                    bluetooth_connected
+                  </span>
+                )}
                 <span className="text-[10px] sm:text-[11px] font-bold text-on-surface uppercase tracking-wider">
                   {bedState.connectedBedId || 'No Bed Paired'}
                 </span>
@@ -205,17 +210,17 @@ export const Header: React.FC<HeaderProps> = ({
             {onOpenPatientChart && (
               <button
                 id="header-patient-btn"
-                onClick={() => onOpenPatientChart('vitals')}
-                className="h-[30px] sm:h-8 px-1.5 sm:px-2 rounded-lg bg-surface-container hover:bg-surface-variant text-on-surface flex items-center gap-1 text-[10px] sm:text-[11px] font-bold border border-outline-variant/30 shadow-2xs active:scale-95 transition-all cursor-pointer"
-                title="Open Patient Details, Vitals & Mass Chart"
+                onClick={() => onOpenPatientChart('mass')}
+                className="h-[30px] sm:h-8 px-1.5 sm:px-2.5 rounded-lg bg-surface-container hover:bg-surface-variant text-on-surface flex items-center gap-1.5 text-[10px] sm:text-[11px] font-bold border border-outline-variant/30 shadow-2xs active:scale-95 transition-all cursor-pointer"
+                title="Open Editable Patient Profile, Vitals & Mass Chart"
               >
                 <span className="material-symbols-outlined text-[15px] sm:text-[16px] text-primary">
-                  ecg_heart
+                  clinical_notes
                 </span>
-                <span className="hidden sm:inline max-w-[85px] truncate">
-                  {bedState.patientName || 'Patient'}
+                <span className="hidden sm:inline max-w-[110px] truncate">
+                  👤 {bedState.patientName || 'Unassigned'} (Edit Profile)
                 </span>
-                <span className="sm:hidden">Chart</span>
+                <span className="sm:hidden">Edit Profile</span>
               </button>
             )}
 

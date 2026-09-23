@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { BedState, PairedDeviceItem } from '../types';
+import { BedState, PairedDeviceItem, PatientProfile, StabilityLevel } from '../types';
 import { PWAInstallButton } from '../components/PWAInstallButton';
 import {
   getPairedDevices,
@@ -7,6 +7,20 @@ import {
   clearAllPairedDevices,
   restoreDefaultPairedDevices,
 } from '../services/pairedDevicesStorage';
+import {
+  getPatientProfile,
+  savePatientProfile,
+} from '../services/patientStorage';
+import {
+  getContactDetails,
+  saveContactDetails,
+  ContactDetails,
+} from '../services/contactStorage';
+import {
+  isAutoBluetoothEnabled,
+  setAutoBluetoothEnabled,
+  autoDetectAndAdoptPairedBluetooth,
+} from '../services/autoBluetoothConnect';
 
 interface SettingsScreenProps {
   bedState: BedState;
@@ -29,6 +43,122 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
   const [exportNotice, setExportNotice] = useState<string | null>(null);
   const [pairedDevices, setPairedDevices] = useState<PairedDeviceItem[]>(() => getPairedDevices());
   const [deviceActionNotice, setDeviceActionNotice] = useState<string | null>(null);
+
+  // Patient Profile & Vitals Editor State
+  const [profile, setProfile] = useState<PatientProfile>(() =>
+    getPatientProfile(bedState.connectedBedId || 'ICU Bed 03')
+  );
+
+  // Global Doctor and Family Contacts State
+  const [contacts, setContacts] = useState<ContactDetails>(() => getContactDetails());
+  const [docName, setDocName] = useState(contacts.doctorName);
+  const [docEmail, setDocEmail] = useState(contacts.doctorEmail);
+  const [docPhone, setDocPhone] = useState(contacts.doctorPhone);
+  
+  const [famName, setFamName] = useState(contacts.familyContactName);
+  const [famPhone, setFamPhone] = useState(contacts.familyContactPhone);
+  const [famEmail, setFamEmail] = useState(contacts.familyContactEmail);
+  const [famRelation, setFamRelation] = useState(contacts.familyContactRelation);
+
+  const [contactsSaveNotice, setContactsSaveNotice] = useState<string | null>(null);
+
+  const handleSaveContacts = (e: React.FormEvent) => {
+    e.preventDefault();
+    const updated: ContactDetails = {
+      doctorName: docName,
+      doctorEmail: docEmail,
+      doctorPhone: docPhone,
+      familyContactName: famName,
+      familyContactPhone: famPhone,
+      familyContactEmail: famEmail,
+      familyContactRelation: famRelation,
+    };
+    saveContactDetails(updated);
+    setContacts(updated);
+    setContactsSaveNotice('Contact Directory Saved Successfully!');
+    setTimeout(() => setContactsSaveNotice(null), 3000);
+  };
+
+  // Fields for patient form
+  const [patientName, setPatientName] = useState(profile.name);
+  const [patientAge, setPatientAge] = useState(profile.age);
+  const [patientSex, setPatientSex] = useState(profile.sex);
+  const [patientMRN, setPatientMRN] = useState(profile.mrn);
+  const [patientBloodType, setPatientBloodType] = useState(profile.bloodType);
+  const [patientStability, setPatientStability] = useState<StabilityLevel>(profile.stability);
+  const [patientWeight, setPatientWeight] = useState(profile.massKg);
+
+  // Vitals form
+  const [heartRate, setHeartRate] = useState(profile.vitals?.heartRate || 75);
+  const [bpSys, setBpSys] = useState(profile.vitals?.bloodPressureSys || 120);
+  const [bpDia, setBpDia] = useState(profile.vitals?.bloodPressureDia || 80);
+  const [spO2, setSpO2] = useState(profile.vitals?.spO2 || 99);
+  const [respRate, setRespRate] = useState(profile.vitals?.respiratoryRate || 16);
+  const [tempC, setTempC] = useState(profile.vitals?.temperatureC || 37.0);
+  const [painScore, setPainScore] = useState(profile.vitals?.painScore || 0);
+
+  const [patientSaveNotice, setPatientSaveNotice] = useState<string | null>(null);
+
+  // Sync state if bedState switches or modal changes it
+  useEffect(() => {
+    const current = getPatientProfile(bedState.connectedBedId || 'ICU Bed 03');
+    setProfile(current);
+    setPatientName(current.name);
+    setPatientAge(current.age);
+    setPatientSex(current.sex);
+    setPatientMRN(current.mrn);
+    setPatientBloodType(current.bloodType);
+    setPatientStability(current.stability);
+    setPatientWeight(current.massKg);
+    if (current.vitals) {
+      setHeartRate(current.vitals.heartRate);
+      setBpSys(current.vitals.bloodPressureSys);
+      setBpDia(current.vitals.bloodPressureDia);
+      setSpO2(current.vitals.spO2);
+      setRespRate(current.vitals.respiratoryRate);
+      setTempC(current.vitals.temperatureC);
+      setPainScore(current.vitals.painScore);
+    }
+  }, [bedState.connectedBedId, bedState.patientName, bedState.patientWeight]);
+
+  const handleSavePatientProfile = (e: React.FormEvent) => {
+    e.preventDefault();
+    const updatedProfile: PatientProfile = {
+      ...profile,
+      name: patientName,
+      age: Number(patientAge),
+      sex: patientSex,
+      mrn: patientMRN,
+      bloodType: patientBloodType,
+      stability: patientStability,
+      massKg: Number(patientWeight),
+      vitals: {
+        ...profile.vitals,
+        heartRate: Number(heartRate),
+        bloodPressureSys: Number(bpSys),
+        bloodPressureDia: Number(bpDia),
+        spO2: Number(spO2),
+        respiratoryRate: Number(respRate),
+        temperatureC: Number(tempC),
+        painScore: Number(painScore),
+        recordedAt: 'Just now (' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + ')',
+      }
+    };
+
+    savePatientProfile(updatedProfile);
+    setProfile(updatedProfile);
+
+    // Sync to application bed state
+    setBedState((prev) => ({
+      ...prev,
+      patientName,
+      patientWeight: Number(patientWeight),
+      patientStability,
+    }));
+
+    setPatientSaveNotice('Clinical Profile & Vitals Saved Successfully!');
+    setTimeout(() => setPatientSaveNotice(null), 3000);
+  };
 
   useEffect(() => {
     const handleStorageChange = (e: any) => {
@@ -83,6 +213,43 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
     setPairedDevices(restored);
     setDeviceActionNotice('Restored demo hospital bed controllers.');
     setTimeout(() => setDeviceActionNotice(null), 3000);
+  };
+
+  // Mobile Bluetooth Auto-Adopt Settings
+  const [autoBtEnabled, setAutoBtEnabled] = useState(() => isAutoBluetoothEnabled());
+  const [autoBtNotice, setAutoBtNotice] = useState<string | null>(null);
+  const [isQueryingBt, setIsQueryingBt] = useState(false);
+
+  const handleToggleAutoBt = (enabled: boolean) => {
+    setAutoBtEnabled(enabled);
+    setAutoBluetoothEnabled(enabled);
+    if (enabled) {
+      handleTriggerAutoBtCheck();
+    }
+  };
+
+  const handleTriggerAutoBtCheck = async () => {
+    setIsQueryingBt(true);
+    setAutoBtNotice('Querying phone Bluetooth for paired ESP32 controller...');
+    try {
+      const res = await autoDetectAndAdoptPairedBluetooth();
+      if (res && res.adopted) {
+        setBedState((prev) => ({
+          ...prev,
+          connectedBedId: res.deviceName,
+          bleSynced: true,
+          wifiConnected: res.transport === 'wifi' || res.transport === 'dual',
+        }));
+        setAutoBtNotice(`Auto-Adopted "${res.deviceName}" from phone Bluetooth.`);
+      } else {
+        setAutoBtNotice('No phone-bonded controller detected in OS settings.');
+      }
+    } catch {
+      setAutoBtNotice('Could not query phone Bluetooth.');
+    } finally {
+      setIsQueryingBt(false);
+      setTimeout(() => setAutoBtNotice(null), 3500);
+    }
   };
 
   const toggleVoice = () => {
@@ -389,6 +556,61 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
         )}
       </div>
 
+      {/* Phone Bluetooth OS Auto-Adopt Card */}
+      <div className="bg-surface-container-lowest rounded-xl p-4 shadow-sm flex flex-col gap-3 border border-outline-variant/15">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-primary">
+              <span className="material-symbols-outlined text-[20px]">bluetooth_connected</span>
+            </span>
+            <div>
+              <h2 className="text-[15px] font-bold text-on-surface">
+                Phone Bluetooth Auto-Adopt
+              </h2>
+              <p className="text-xs text-on-surface-variant">
+                If controller is already paired in mobile Bluetooth settings, app takes it as default
+              </p>
+            </div>
+          </div>
+
+          <label className="relative inline-flex items-center cursor-pointer">
+            <input
+              type="checkbox"
+              checked={autoBtEnabled}
+              onChange={(e) => handleToggleAutoBt(e.target.checked)}
+              className="sr-only peer"
+            />
+            <div className="w-11 h-6 bg-surface-container-highest peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
+          </label>
+        </div>
+
+        {autoBtNotice && (
+          <div className="text-xs bg-emerald-50 text-emerald-800 font-bold p-2.5 rounded-lg text-center animate-in fade-in">
+            {autoBtNotice}
+          </div>
+        )}
+
+        <div className="flex items-center justify-between pt-1 border-t border-outline-variant/10 text-xs">
+          <div className="flex items-center gap-2">
+            <span className={`w-2 h-2 rounded-full ${bedState.bleSynced ? 'bg-emerald-500' : 'bg-outline-variant'}`} />
+            <span className="text-on-surface-variant font-medium">
+              Active Bed: <strong className="text-on-surface">{bedState.connectedBedId || 'None'}</strong>
+            </span>
+          </div>
+
+          <button
+            onClick={handleTriggerAutoBtCheck}
+            disabled={isQueryingBt}
+            className="px-3 py-1.5 rounded-lg bg-surface-container hover:bg-surface-variant text-primary font-bold text-xs flex items-center gap-1.5 cursor-pointer transition-all active:scale-98 border border-primary/20"
+          >
+            <span className={`material-symbols-outlined text-[15px] ${isQueryingBt ? 'animate-spin' : ''}`}>
+              sync
+            </span>
+            <span>{isQueryingBt ? 'Scanning...' : 'Sync Phone Bluetooth'}</span>
+          </button>
+        </div>
+      </div>
+
       {/* Power & Backup Battery Subsystem */}
       <div className="bg-surface-container-lowest rounded-xl p-4 shadow-sm flex flex-col gap-3 border border-outline-variant/15">
         <div className="flex items-center justify-between">
@@ -673,73 +895,470 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
         </div>
       </div>
 
-      {/* Patient Clinical Profile & Charting Management */}
-      <div className="bg-surface-container-lowest rounded-xl p-4 shadow-sm flex flex-col gap-3 border border-outline-variant/15">
-        <div className="flex items-center justify-between">
+      {/* Patient Clinical Profile & Charting Management Form */}
+      <div className="bg-surface-container-lowest rounded-xl p-4 shadow-sm flex flex-col gap-3.5 border border-outline-variant/15">
+        <div className="flex items-center justify-between pb-2 border-b border-outline-variant/10">
           <div className="flex items-center gap-2">
             <span className="material-symbols-outlined text-primary text-[20px]">
               clinical_notes
             </span>
             <h2 className="text-[15px] font-bold text-on-surface">
-              Patient Clinical Chart &amp; Vitals
+              Patient Profile &amp; Vitals Editor
             </h2>
           </div>
           <span
             className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full uppercase ${
-              bedState.patientStability === 'Critical'
+              patientStability === 'Critical'
                 ? 'bg-red-100 text-red-800'
-                : bedState.patientStability === 'Guarded'
+                : patientStability === 'Guarded'
                 ? 'bg-amber-100 text-amber-800'
                 : 'bg-emerald-100 text-emerald-800'
             }`}
           >
-            {bedState.patientStability || 'Stable'}
+            {patientStability || 'Stable'}
           </span>
         </div>
 
-        <div className="bg-surface-container-low p-3 rounded-lg flex flex-col gap-2">
-          <div className="flex items-center justify-between">
-            <div>
-              <div className="text-sm font-bold text-on-surface">
-                {bedState.patientName || 'J. Anderson'}
+        {patientSaveNotice && (
+          <div className="bg-emerald-600 text-white text-xs font-bold p-2.5 rounded-lg text-center flex items-center justify-center gap-2 animate-in fade-in">
+            <span className="material-symbols-outlined text-[16px]">check_circle</span>
+            <span>{patientSaveNotice}</span>
+          </div>
+        )}
+
+        <form onSubmit={handleSavePatientProfile} className="flex flex-col gap-4">
+          {/* Section 1: Demographics */}
+          <div>
+            <span className="text-[10px] font-black tracking-wider text-primary uppercase block mb-2">
+              1. Patient Demographics &amp; Bed Assignment
+            </span>
+            <div className="grid grid-cols-2 gap-2.5">
+              <div className="flex flex-col gap-1">
+                <label className="text-[11px] font-extrabold text-on-surface-variant">
+                  Patient Name
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={patientName}
+                  onChange={(e) => setPatientName(e.target.value)}
+                  className="w-full bg-surface-container/60 hover:bg-surface-container px-3 py-2 rounded-lg border border-outline-variant/30 text-xs focus:outline-primary font-bold text-on-surface"
+                  placeholder="e.g. J. Anderson"
+                />
               </div>
-              <div className="text-xs text-on-surface-variant">
-                Assigned Bed: {bedState.connectedBedId} • {bedState.roomNumber}
+
+              <div className="flex flex-col gap-1">
+                <label className="text-[11px] font-extrabold text-on-surface-variant">
+                  Medical Record Number (MRN)
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={patientMRN}
+                  onChange={(e) => setPatientMRN(e.target.value)}
+                  className="w-full bg-surface-container/60 hover:bg-surface-container px-3 py-2 rounded-lg border border-outline-variant/30 text-xs focus:outline-primary font-mono text-on-surface"
+                  placeholder="e.g. MRN-849204-ICU"
+                />
               </div>
-            </div>
-            <div className="text-right">
-              <div className="text-sm font-extrabold text-primary">
-                {bedState.patientWeight || 68.4} kg
+
+              <div className="flex flex-col gap-1">
+                <label className="text-[11px] font-extrabold text-on-surface-variant">
+                  Age (Years)
+                </label>
+                <input
+                  type="number"
+                  required
+                  min="0"
+                  max="125"
+                  value={patientAge}
+                  onChange={(e) => setPatientAge(Number(e.target.value))}
+                  className="w-full bg-surface-container/60 hover:bg-surface-container px-3 py-2 rounded-lg border border-outline-variant/30 text-xs focus:outline-primary font-bold text-on-surface"
+                />
               </div>
-              <div className="text-[10px] text-outline">
-                Verified OIML Scale
+
+              <div className="flex flex-col gap-1">
+                <label className="text-[11px] font-extrabold text-on-surface-variant">
+                  Biological Sex
+                </label>
+                <select
+                  value={patientSex}
+                  onChange={(e) => setPatientSex(e.target.value as 'Male' | 'Female' | 'Other')}
+                  className="w-full bg-surface-container/60 hover:bg-surface-container px-2 py-2 rounded-lg border border-outline-variant/30 text-xs focus:outline-primary font-bold text-on-surface cursor-pointer"
+                >
+                  <option value="Male">Male</option>
+                  <option value="Female">Female</option>
+                  <option value="Other">Other</option>
+                </select>
+              </div>
+
+              <div className="flex flex-col gap-1">
+                <label className="text-[11px] font-extrabold text-on-surface-variant">
+                  Blood Type
+                </label>
+                <select
+                  value={patientBloodType}
+                  onChange={(e) => setPatientBloodType(e.target.value)}
+                  className="w-full bg-surface-container/60 hover:bg-surface-container px-2 py-2 rounded-lg border border-outline-variant/30 text-xs focus:outline-primary font-bold text-on-surface cursor-pointer"
+                >
+                  {['O+', 'O-', 'A+', 'A-', 'B+', 'B-', 'AB+', 'AB-'].map((bt) => (
+                    <option key={bt} value={bt}>
+                      {bt}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="flex flex-col gap-1">
+                <label className="text-[11px] font-extrabold text-on-surface-variant">
+                  Patient Weight (kg)
+                </label>
+                <input
+                  type="number"
+                  required
+                  step="0.1"
+                  min="5"
+                  max="400"
+                  value={patientWeight}
+                  onChange={(e) => setPatientWeight(Number(e.target.value))}
+                  className="w-full bg-surface-container/60 hover:bg-surface-container px-3 py-2 rounded-lg border border-outline-variant/30 text-xs focus:outline-primary font-bold text-on-surface"
+                />
+              </div>
+
+              <div className="flex flex-col col-span-2 gap-1">
+                <label className="text-[11px] font-extrabold text-on-surface-variant">
+                  Stability Index
+                </label>
+                <div className="grid grid-cols-3 gap-1.5 mt-0.5">
+                  {(['Stable', 'Guarded', 'Critical'] as StabilityLevel[]).map((st) => (
+                    <button
+                      key={st}
+                      type="button"
+                      onClick={() => setPatientStability(st)}
+                      className={`py-1.5 rounded-lg text-xs font-bold transition-all border cursor-pointer ${
+                        patientStability === st
+                          ? st === 'Critical'
+                            ? 'bg-red-500 text-white border-red-500'
+                            : st === 'Guarded'
+                            ? 'bg-amber-500 text-white border-amber-500'
+                            : 'bg-emerald-500 text-white border-emerald-500'
+                          : 'bg-surface-container-low hover:bg-surface-container border-outline-variant/20 text-on-surface-variant'
+                      }`}
+                    >
+                      {st}
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
           </div>
 
-          <p className="text-xs text-on-surface-variant leading-relaxed">
-            Manage comprehensive clinical parameters including patient mass, stability index, live vitals, diagnostic laboratory reports, medications, attending doctor visit logs, and emergency notes.
-          </p>
-        </div>
+          {/* Section 2: Vitals */}
+          <div className="pt-2 border-t border-outline-variant/10">
+            <span className="text-[10px] font-black tracking-wider text-primary uppercase block mb-2">
+              2. Real-Time Telemetry &amp; Vitals
+            </span>
+            <div className="grid grid-cols-3 gap-2">
+              <div className="flex flex-col gap-1">
+                <label className="text-[10px] font-bold text-on-surface-variant truncate">
+                  HR (bpm)
+                </label>
+                <input
+                  type="number"
+                  required
+                  value={heartRate}
+                  onChange={(e) => setHeartRate(Number(e.target.value))}
+                  className="w-full bg-surface-container/60 hover:bg-surface-container px-2.5 py-1.5 rounded-lg border border-outline-variant/30 text-xs focus:outline-primary font-bold text-on-surface"
+                />
+              </div>
 
-        {onOpenPatientChart && (
-          <div className="grid grid-cols-2 gap-2 pt-1">
+              <div className="flex flex-col gap-1">
+                <label className="text-[10px] font-bold text-on-surface-variant truncate">
+                  BP Sys (mmHg)
+                </label>
+                <input
+                  type="number"
+                  required
+                  value={bpSys}
+                  onChange={(e) => setBpSys(Number(e.target.value))}
+                  className="w-full bg-surface-container/60 hover:bg-surface-container px-2.5 py-1.5 rounded-lg border border-outline-variant/30 text-xs focus:outline-primary font-bold text-on-surface"
+                />
+              </div>
+
+              <div className="flex flex-col gap-1">
+                <label className="text-[10px] font-bold text-on-surface-variant truncate">
+                  BP Dia (mmHg)
+                </label>
+                <input
+                  type="number"
+                  required
+                  value={bpDia}
+                  onChange={(e) => setBpDia(Number(e.target.value))}
+                  className="w-full bg-surface-container/60 hover:bg-surface-container px-2.5 py-1.5 rounded-lg border border-outline-variant/30 text-xs focus:outline-primary font-bold text-on-surface"
+                />
+              </div>
+
+              <div className="flex flex-col gap-1">
+                <label className="text-[10px] font-bold text-on-surface-variant truncate">
+                  SpO2 (%)
+                </label>
+                <input
+                  type="number"
+                  required
+                  min="50"
+                  max="100"
+                  value={spO2}
+                  onChange={(e) => setSpO2(Number(e.target.value))}
+                  className="w-full bg-surface-container/60 hover:bg-surface-container px-2.5 py-1.5 rounded-lg border border-outline-variant/30 text-xs focus:outline-primary font-bold text-on-surface"
+                />
+              </div>
+
+              <div className="flex flex-col gap-1">
+                <label className="text-[10px] font-bold text-on-surface-variant truncate">
+                  Resp (rr)
+                </label>
+                <input
+                  type="number"
+                  required
+                  value={respRate}
+                  onChange={(e) => setRespRate(Number(e.target.value))}
+                  className="w-full bg-surface-container/60 hover:bg-surface-container px-2.5 py-1.5 rounded-lg border border-outline-variant/30 text-xs focus:outline-primary font-bold text-on-surface"
+                />
+              </div>
+
+              <div className="flex flex-col gap-1">
+                <label className="text-[10px] font-bold text-on-surface-variant truncate">
+                  Temp (°C)
+                </label>
+                <input
+                  type="number"
+                  required
+                  step="0.1"
+                  value={tempC}
+                  onChange={(e) => setTempC(Number(e.target.value))}
+                  className="w-full bg-surface-container/60 hover:bg-surface-container px-2.5 py-1.5 rounded-lg border border-outline-variant/30 text-xs focus:outline-primary font-bold text-on-surface"
+                />
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-2 mt-1">
             <button
-              onClick={() => onOpenPatientChart('mass')}
-              className="h-10 rounded-lg bg-primary text-on-primary hover:bg-primary-hover text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer transition-all shadow-xs"
+              type="button"
+              onClick={() => {
+                setPatientName('');
+                setPatientAge(0);
+                setPatientSex('Male');
+                setPatientMRN('MRN-' + Math.floor(100000 + Math.random() * 900000));
+                setPatientBloodType('O+');
+                setPatientStability('Stable');
+                setPatientWeight(0);
+                setHeartRate(0);
+                setBpSys(0);
+                setBpDia(0);
+                setSpO2(0);
+                setRespRate(0);
+                setTempC(0);
+                setPainScore(0);
+                setPatientSaveNotice('All default patient data cleared. Form is ready.');
+                setTimeout(() => setPatientSaveNotice(null), 3000);
+              }}
+              className="min-h-[44px] rounded-xl bg-surface-container hover:bg-tertiary/10 text-on-surface-variant hover:text-tertiary border border-outline-variant/30 hover:border-tertiary/30 font-extrabold text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all cursor-pointer"
             >
-              <span className="material-symbols-outlined text-[16px]">scale</span>
-              <span>Mass &amp; Stability</span>
+              <span className="material-symbols-outlined text-[18px]">
+                delete_sweep
+              </span>
+              Erase Data
             </button>
             <button
-              onClick={() => onOpenPatientChart('vitals')}
+              type="submit"
+              className="min-h-[44px] rounded-xl bg-primary hover:bg-primary-hover text-on-primary font-extrabold text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 shadow-xs transition-all cursor-pointer active:scale-98"
+            >
+              <span className="material-symbols-outlined text-[18px]">
+                save
+              </span>
+              Save Profile
+            </button>
+          </div>
+        </form>
+
+        {onOpenPatientChart && (
+          <div className="grid grid-cols-2 gap-2 pt-2 border-t border-outline-variant/10">
+            <button
+              onClick={() => onOpenPatientChart('mass')}
               className="h-10 rounded-lg bg-surface-container hover:bg-surface-variant text-on-surface text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer transition-all border border-outline-variant/20"
             >
-              <span className="material-symbols-outlined text-[16px] text-tertiary">ecg_heart</span>
-              <span>Vitals &amp; Reports</span>
+              <span className="material-symbols-outlined text-[16px] text-primary">scale</span>
+              <span>Advanced Mass Info</span>
+            </button>
+            <button
+              onClick={() => onOpenPatientChart('diagnostic')}
+              className="h-10 rounded-lg bg-surface-container hover:bg-surface-variant text-on-surface text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer transition-all border border-outline-variant/20"
+            >
+              <span className="material-symbols-outlined text-[16px] text-tertiary">analytics</span>
+              <span>Labs &amp; Diagnostics</span>
             </button>
           </div>
         )}
+      </div>
+
+      {/* Clinical & Family Contact Directory */}
+      <div className="bg-surface-container-lowest rounded-xl p-4 shadow-sm flex flex-col gap-3.5 border border-outline-variant/15">
+        <div className="flex items-center justify-between pb-2 border-b border-outline-variant/10">
+          <div className="flex items-center gap-2">
+            <span className="material-symbols-outlined text-primary text-[20px]">
+              contact_phone
+            </span>
+            <h2 className="text-[15px] font-bold text-on-surface">
+              Clinical &amp; Family Contact Directory
+            </h2>
+          </div>
+          <span className="text-[10px] font-extrabold bg-primary/10 text-primary px-2.5 py-0.5 rounded-full uppercase">
+            Active Directory
+          </span>
+        </div>
+
+        <p className="text-xs text-on-surface-variant leading-relaxed">
+          Manage authorized medical practitioners and next-of-kin contacts. These directories are actively referenced by the <strong>Clinical Telemetry Broadcaster</strong> for emergency alerts and scheduled reports.
+        </p>
+
+        {contactsSaveNotice && (
+          <div className="bg-emerald-600 text-white text-xs font-bold p-2.5 rounded-lg text-center flex items-center justify-center gap-2 animate-in fade-in">
+            <span className="material-symbols-outlined text-[16px]">check_circle</span>
+            <span>{contactsSaveNotice}</span>
+          </div>
+        )}
+
+        <form onSubmit={handleSaveContacts} className="flex flex-col gap-4">
+          {/* Subsection 1: Attending Doctor */}
+          <div className="bg-surface-container-low/40 p-3 rounded-xl border border-outline-variant/10">
+            <span className="text-[10px] font-black tracking-wider text-primary uppercase block mb-3">
+              🩺 Attending Medical Staff
+            </span>
+            <div className="flex flex-col gap-2.5">
+              <div className="flex flex-col gap-1">
+                <label className="text-[11px] font-extrabold text-on-surface-variant">
+                  Attending Physician Name
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={docName}
+                  onChange={(e) => setDocName(e.target.value)}
+                  placeholder="e.g. Dr. Elizabeth Vance"
+                  className="w-full bg-surface-container/60 hover:bg-surface-container px-3 py-2 rounded-lg border border-outline-variant/30 text-xs focus:outline-primary font-bold text-on-surface"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div className="flex flex-col gap-1">
+                  <label className="text-[11px] font-extrabold text-on-surface-variant">
+                    Doctor Email Address
+                  </label>
+                  <input
+                    type="email"
+                    required
+                    value={docEmail}
+                    onChange={(e) => setDocEmail(e.target.value)}
+                    placeholder="physician@marq-clinical.com"
+                    className="w-full bg-surface-container/60 hover:bg-surface-container px-3 py-2 rounded-lg border border-outline-variant/30 text-xs focus:outline-primary font-bold text-on-surface"
+                  />
+                </div>
+
+                <div className="flex flex-col gap-1">
+                  <label className="text-[11px] font-extrabold text-on-surface-variant">
+                    Doctor WhatsApp / Phone
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={docPhone}
+                    onChange={(e) => setDocPhone(e.target.value)}
+                    placeholder="e.g. +15553829912"
+                    className="w-full bg-surface-container/60 hover:bg-surface-container px-3 py-2 rounded-lg border border-outline-variant/30 text-xs focus:outline-primary font-mono text-on-surface font-bold"
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Subsection 2: Family Emergency Contact */}
+          <div className="bg-surface-container-low/40 p-3 rounded-xl border border-outline-variant/10">
+            <span className="text-[10px] font-black tracking-wider text-primary uppercase block mb-3">
+              🏠 Family Emergency Contact
+            </span>
+            <div className="flex flex-col gap-2.5">
+              <div className="grid grid-cols-2 gap-2">
+                <div className="flex flex-col gap-1">
+                  <label className="text-[11px] font-extrabold text-on-surface-variant">
+                    Contact Name
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={famName}
+                    onChange={(e) => setFamName(e.target.value)}
+                    placeholder="e.g. Robert Anderson"
+                    className="w-full bg-surface-container/60 hover:bg-surface-container px-3 py-2 rounded-lg border border-outline-variant/30 text-xs focus:outline-primary font-bold text-on-surface"
+                  />
+                </div>
+
+                <div className="flex flex-col gap-1">
+                  <label className="text-[11px] font-extrabold text-on-surface-variant">
+                    Relation
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={famRelation}
+                    onChange={(e) => setFamRelation(e.target.value)}
+                    placeholder="e.g. Spouse"
+                    className="w-full bg-surface-container/60 hover:bg-surface-container px-3 py-2 rounded-lg border border-outline-variant/30 text-xs focus:outline-primary font-bold text-on-surface"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div className="flex flex-col gap-1">
+                  <label className="text-[11px] font-extrabold text-on-surface-variant">
+                    Contact Email Address
+                  </label>
+                  <input
+                    type="email"
+                    required
+                    value={famEmail}
+                    onChange={(e) => setFamEmail(e.target.value)}
+                    placeholder="e.g. robert@family.com"
+                    className="w-full bg-surface-container/60 hover:bg-surface-container px-3 py-2 rounded-lg border border-outline-variant/30 text-xs focus:outline-primary font-bold text-on-surface"
+                  />
+                </div>
+
+                <div className="flex flex-col gap-1">
+                  <label className="text-[11px] font-extrabold text-on-surface-variant">
+                    Contact WhatsApp / Phone
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={famPhone}
+                    onChange={(e) => setFamPhone(e.target.value)}
+                    placeholder="e.g. +15558902344"
+                    className="w-full bg-surface-container/60 hover:bg-surface-container px-3 py-2 rounded-lg border border-outline-variant/30 text-xs focus:outline-primary font-mono text-on-surface font-bold"
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <button
+            type="submit"
+            className="w-full min-h-[44px] rounded-xl bg-primary hover:bg-primary-hover text-on-primary font-extrabold text-xs uppercase tracking-wider flex items-center justify-center gap-2 shadow-xs transition-all cursor-pointer active:scale-98"
+          >
+            <span className="material-symbols-outlined text-[18px]">
+              save
+            </span>
+            Save Contact Directory
+          </button>
+        </form>
       </div>
 
       {/* Caregiver Authorization */}

@@ -17,6 +17,7 @@ import { AdvancedScreen } from './screens/AdvancedScreen';
 import { PairScreen } from './screens/PairScreen';
 import { SettingsScreen } from './screens/SettingsScreen';
 import { removePairedDevice } from './services/pairedDevicesStorage';
+import { autoDetectAndAdoptPairedBluetooth, AutoAdoptResult } from './services/autoBluetoothConnect';
 
 export default function App() {
   const [currentScreen, setCurrentScreen] = useState<ScreenType>('home');
@@ -27,6 +28,29 @@ export default function App() {
   const [patientModalTab, setPatientModalTab] = useState<
     'vitals' | 'mass' | 'diagnostic' | 'medication' | 'doctor' | 'emergency'
   >('mass');
+  const [autoAdoptNotice, setAutoAdoptNotice] = useState<AutoAdoptResult | null>(null);
+
+  // Auto-detect and adopt phone Bluetooth controller if already paired in Android/OS
+  useEffect(() => {
+    let isMounted = true;
+    autoDetectAndAdoptPairedBluetooth().then((result) => {
+      if (isMounted && result && result.adopted) {
+        setAutoAdoptNotice(result);
+        setBedState((prev) => ({
+          ...prev,
+          connectedBedId: result.deviceName,
+          bleSynced: true,
+          wifiConnected: result.transport === 'wifi' || result.transport === 'dual',
+        }));
+        setTimeout(() => {
+          if (isMounted) setAutoAdoptNotice(null);
+        }, 8000);
+      }
+    });
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   // Register PWA Service Worker if in browser
   useEffect(() => {
@@ -160,6 +184,39 @@ export default function App() {
           isLowBattery ? 'pt-44' : 'pt-32'
         } pb-36 max-w-lg mx-auto transition-all duration-200`}
       >
+        {/* Mobile Bluetooth Auto-Adopted Notification */}
+        {autoAdoptNotice && (
+          <div className="mb-3.5 p-3 rounded-xl bg-primary text-on-primary shadow-md border border-primary-container/30 flex items-center justify-between gap-2.5 animate-in slide-in-from-top-2 duration-300">
+            <div className="flex items-center gap-2.5">
+              <span className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center shrink-0">
+                <span className="material-symbols-outlined text-white text-[20px]">
+                  bluetooth_connected
+                </span>
+              </span>
+              <div>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs font-bold leading-tight">
+                    Phone Bluetooth Auto-Linked
+                  </span>
+                  <span className="text-[9px] font-extrabold px-1.5 py-0.2 rounded-full bg-white/25 uppercase tracking-wider">
+                    OS Paired
+                  </span>
+                </div>
+                <p className="text-[11px] text-white/90 leading-tight mt-0.5">
+                  <strong>{autoAdoptNotice.deviceName}</strong> is already paired to this device. Default bed connection active — no pairing required!
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => setAutoAdoptNotice(null)}
+              className="p-1 rounded-full hover:bg-white/20 text-white cursor-pointer transition-colors shrink-0"
+              title="Dismiss notification"
+            >
+              <span className="material-symbols-outlined text-[16px]">close</span>
+            </button>
+          </div>
+        )}
+
         {currentScreen === 'home' && (
           <HomeDashboard
             bedState={bedState}
