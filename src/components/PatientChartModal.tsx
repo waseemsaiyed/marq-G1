@@ -9,22 +9,33 @@ import {
   MedicationRecord,
   DoctorVisitLog,
   VitalsReading,
+  PatientChartTabKey,
 } from '../types';
 import {
   getPatientProfile,
   savePatientProfile,
   resetPatientProfile,
+  capturePatientVitals,
 } from '../services/patientStorage';
+import {
+  generateVitalsCsv,
+  downloadVitalsCsv,
+  shareVitalsCsv,
+  copyVitalsCsvToClipboard,
+  getVitalsCsvFilename,
+  getClinicalVitalsStatus,
+} from '../services/vitalsExportService';
+import { VitalsTrendPageView } from './VitalsTrendPageView';
 
 interface PatientChartModalProps {
   isOpen: boolean;
   onClose: () => void;
   bedState: BedState;
   setBedState: React.Dispatch<React.SetStateAction<BedState>>;
-  initialTab?: 'vitals' | 'mass' | 'diagnostic' | 'medication' | 'doctor' | 'emergency';
+  initialTab?: PatientChartTabKey;
 }
 
-type TabKey = 'vitals' | 'mass' | 'diagnostic' | 'medication' | 'doctor' | 'emergency';
+type TabKey = PatientChartTabKey;
 
 export const PatientChartModal: React.FC<PatientChartModalProps> = ({
   isOpen,
@@ -57,6 +68,12 @@ export const PatientChartModal: React.FC<PatientChartModalProps> = ({
 
   const [newAllergy, setNewAllergy] = useState('');
   const [newPrecaution, setNewPrecaution] = useState('');
+
+  // Vitals CSV export & capture states
+  const [showCsvPreviewModal, setShowCsvPreviewModal] = useState(false);
+  const [csvPreviewText, setCsvPreviewText] = useState('');
+  const [isExportingCsv, setIsExportingCsv] = useState(false);
+  const [showExportDropdown, setShowExportDropdown] = useState(false);
 
   // Reload profile when modal opens or bed switches
   useEffect(() => {
@@ -115,6 +132,88 @@ export const PatientChartModal: React.FC<PatientChartModalProps> = ({
     setProfile(updated);
     savePatientProfile(updated);
     showFeedback('Vitals updated');
+  };
+
+  // Capture current vitals into history with exact timestamp and log entry
+  const handleCaptureVitals = (customNote?: string) => {
+    const patch = customNote !== undefined ? { notes: customNote } : {};
+    const { profile: updatedProfile, capturedReading } = capturePatientVitals(
+      profile,
+      patch,
+      'Authorized Nurse / Clinician'
+    );
+    setProfile(updatedProfile);
+    showFeedback(`Captured reading ${capturedReading.id} (${capturedReading.recordedAt})`);
+  };
+
+  // Remove an erroneous vitals reading from history
+  const handleDeleteVitals = (id?: string) => {
+    if (!id || !profile.vitalsHistory) return;
+    const updatedHistory = profile.vitalsHistory.filter((v) => v.id !== id);
+    const updated = {
+      ...profile,
+      vitalsHistory: updatedHistory,
+    };
+    setProfile(updated);
+    savePatientProfile(updated);
+    showFeedback('Vitals reading removed from history');
+  };
+
+  // Load a historical vitals reading into active editor inputs
+  const handleRestoreVitals = (reading: VitalsReading) => {
+    const updated: PatientProfile = {
+      ...profile,
+      vitals: {
+        ...reading,
+        recordedAt: 'Restored from ' + reading.recordedAt,
+      },
+    };
+    setProfile(updated);
+    savePatientProfile(updated);
+    showFeedback(`Loaded vitals reading ${reading.id || ''}`);
+  };
+
+  // Download Formatted CSV
+  const handleDownloadCsv = (readings?: VitalsReading[]) => {
+    try {
+      const res = downloadVitalsCsv(profile, readings);
+      if (res.success) {
+        showFeedback(`Downloaded CSV: ${res.filename}`);
+      }
+    } catch {
+      showFeedback('Failed to generate or download CSV');
+    }
+  };
+
+  // Share CSV directly (Web Share API Level 2 with native file sheet, fallback to clipboard/download)
+  const handleShareCsv = async (readings?: VitalsReading[]) => {
+    setIsExportingCsv(true);
+    try {
+      const result = await shareVitalsCsv(profile, readings);
+      showFeedback(result.message);
+    } catch {
+      showFeedback('Could not share vitals CSV');
+    } finally {
+      setIsExportingCsv(false);
+    }
+  };
+
+  // Copy CSV to clipboard
+  const handleCopyCsv = async (readings?: VitalsReading[]) => {
+    const ok = await copyVitalsCsvToClipboard(profile, readings);
+    if (ok) {
+      showFeedback('Formatted CSV copied to clipboard!');
+    } else {
+      showFeedback('Could not copy CSV to clipboard');
+    }
+  };
+
+  // Open CSV live preview overlay
+  const handleOpenCsvPreview = (readings?: VitalsReading[]) => {
+    const text = generateVitalsCsv(profile, readings);
+    setCsvPreviewText(text);
+    setShowCsvPreviewModal(true);
+    setShowExportDropdown(false);
   };
 
   // Add new diagnostic report
@@ -298,7 +397,18 @@ export const PatientChartModal: React.FC<PatientChartModalProps> = ({
   // Tabs List
   const tabs: { key: TabKey; label: string; icon: string; badge?: string | number }[] = [
     { key: 'mass', label: 'Patient Info & Mass', icon: 'person' },
-    { key: 'vitals', label: 'Vitals', icon: 'vital_signs' },
+    {
+      key: 'vitals',
+      label: 'Vitals',
+      icon: 'vital_signs',
+      badge: profile.vitalsHistory?.length || 1,
+    },
+    {
+      key: 'trends',
+      label: 'Trends',
+      icon: 'trending_up',
+      badge: 'Arrows',
+    },
     { key: 'diagnostic', label: 'Diagnostics', icon: 'biomedical', badge: profile.diagnosticReports.length },
     { key: 'medication', label: 'Medications', icon: 'medication', badge: profile.medications.length },
     { key: 'doctor', label: 'Doctor Visits', icon: 'clinical_notes', badge: profile.doctorVisits.length },
@@ -339,6 +449,15 @@ export const PatientChartModal: React.FC<PatientChartModalProps> = ({
           </div>
 
           <div className="flex items-center gap-2">
+            <button
+              onClick={() => handleDownloadCsv()}
+              className="text-[11px] font-bold text-primary bg-primary/10 hover:bg-primary/20 px-2.5 py-1 rounded-lg transition-colors cursor-pointer flex items-center gap-1 shadow-2xs border border-primary/20"
+              title="Quick Download Formatted Vitals CSV"
+            >
+              <span className="material-symbols-outlined text-[15px]">file_download</span>
+              <span className="hidden sm:inline">Export Vitals CSV</span>
+              <span className="sm:hidden">CSV</span>
+            </button>
             <button
               onClick={handleReset}
               className="text-[11px] font-bold text-outline hover:text-on-surface hover:bg-surface-container px-2 py-1 rounded-lg transition-colors cursor-pointer"
@@ -580,7 +699,7 @@ export const PatientChartModal: React.FC<PatientChartModalProps> = ({
 
               {/* Integrated Bed Scale & Patient Mass */}
               <div className="bg-primary/5 border border-primary/20 rounded-xl p-4 flex flex-col gap-3">
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between flex-wrap gap-2">
                   <div className="flex items-center gap-2">
                     <span className="material-symbols-outlined text-primary text-[22px]">
                       scale
@@ -589,9 +708,20 @@ export const PatientChartModal: React.FC<PatientChartModalProps> = ({
                       Integrated Bed Scale &amp; Patient Mass
                     </h4>
                   </div>
-                  <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded bg-primary-container text-on-primary-container">
-                    OIML Class III ±0.05kg
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab('trends')}
+                      className="text-xs font-bold text-primary hover:underline flex items-center gap-1 cursor-pointer bg-primary/10 hover:bg-primary/20 px-2 py-0.5 rounded-md transition-colors"
+                      title="View weight delta and trend analysis"
+                    >
+                      <span className="material-symbols-outlined text-[15px]">trending_up</span>
+                      <span>Weight Trends</span>
+                    </button>
+                    <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded bg-primary-container text-on-primary-container">
+                      OIML Class III ±0.05kg
+                    </span>
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
@@ -769,33 +899,137 @@ export const PatientChartModal: React.FC<PatientChartModalProps> = ({
             </div>
           )}
 
-          {/* TAB 2: PATIENT VITALS */}
+          {/* TAB 2: PATIENT VITALS & CSV TELEMETRY EXPORT */}
           {activeTab === 'vitals' && (
             <div className="flex flex-col gap-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h4 className="text-sm font-extrabold text-on-surface">
-                    Real-time Patient Vitals Record
-                  </h4>
-                  <p className="text-xs text-on-surface-variant">
-                    Recorded: {profile.vitals.recordedAt}
+              {/* Header & Export Control Panel */}
+              <div className="bg-surface-container-low p-3.5 sm:p-4 rounded-xl border border-outline-variant/20 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs">
+                <div className="flex flex-col">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h4 className="text-sm font-extrabold text-on-surface">
+                      Real-time Patient Vitals &amp; Telemetry
+                    </h4>
+                    {(() => {
+                      const status = getClinicalVitalsStatus(profile.vitals);
+                      const isAlert =
+                        status.includes('Hypoxemia') ||
+                        status.includes('Severe') ||
+                        status.includes('Pyrexia');
+                      const isWarning =
+                        status.includes('Tachycardia') ||
+                        status.includes('Hypertensive') ||
+                        status.includes('Borderline') ||
+                        status.includes('Hypotensive');
+                      return (
+                        <span
+                          className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full uppercase tracking-wider ${
+                            isAlert
+                              ? 'bg-red-100 text-red-800 dark:bg-red-950/60 dark:text-red-300'
+                              : isWarning
+                              ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300'
+                              : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300'
+                          }`}
+                        >
+                          {status}
+                        </span>
+                      );
+                    })()}
+                  </div>
+                  <p className="text-xs text-on-surface-variant mt-0.5">
+                    Recorded: <strong>{profile.vitals.recordedAt}</strong> •{' '}
+                    <span>{profile.vitalsHistory?.length || 1} readings in clinical timeline</span>
                   </p>
                 </div>
+
+                {/* Action Buttons: Capture & CSV Export Tools */}
+                <div className="flex items-center gap-2 flex-wrap">
+                  {/* Capture Button */}
+                  <button
+                    onClick={() => handleCaptureVitals()}
+                    className="px-3 py-1.5 rounded-lg bg-primary text-on-primary text-xs font-extrabold flex items-center gap-1.5 cursor-pointer shadow-xs hover:bg-primary-container transition-all active:scale-98"
+                    title="Capture current vital values into timeline with timestamp"
+                  >
+                    <span className="material-symbols-outlined text-[16px]">add_chart</span>
+                    <span>Capture Reading</span>
+                  </button>
+
+                  {/* CSV Export Button Group */}
+                  <div className="flex items-center bg-surface-container-lowest rounded-lg border border-outline-variant/30 p-0.5 shadow-2xs">
+                    <button
+                      onClick={() => handleDownloadCsv()}
+                      className="px-2.5 py-1 text-xs font-bold text-on-surface hover:text-primary hover:bg-surface-container rounded flex items-center gap-1 transition-colors cursor-pointer"
+                      title="Download formatted CSV file to device"
+                    >
+                      <span className="material-symbols-outlined text-[15px] text-primary">download</span>
+                      <span>CSV</span>
+                    </button>
+
+                    <button
+                      onClick={() => handleShareCsv()}
+                      disabled={isExportingCsv}
+                      className="px-2 py-1 text-xs font-bold text-on-surface hover:text-primary hover:bg-surface-container rounded flex items-center gap-1 transition-colors cursor-pointer"
+                      title="Share CSV file directly via mobile share sheet"
+                    >
+                      <span
+                        className={`material-symbols-outlined text-[15px] text-primary ${
+                          isExportingCsv ? 'animate-spin' : ''
+                        }`}
+                      >
+                        {isExportingCsv ? 'sync' : 'share'}
+                      </span>
+                      <span className="hidden sm:inline">Share</span>
+                    </button>
+
+                    <button
+                      onClick={() => handleCopyCsv()}
+                      className="px-2 py-1 text-xs font-bold text-on-surface hover:text-primary hover:bg-surface-container rounded flex items-center gap-1 transition-colors cursor-pointer"
+                      title="Copy formatted CSV text to clipboard"
+                    >
+                      <span className="material-symbols-outlined text-[15px] text-on-surface-variant">
+                        content_copy
+                      </span>
+                    </button>
+
+                    <button
+                      onClick={() => handleOpenCsvPreview()}
+                      className="px-2 py-1 text-xs font-bold text-on-surface hover:text-primary hover:bg-surface-container rounded flex items-center gap-1 transition-colors cursor-pointer"
+                      title="Preview formatted CSV rows before export"
+                    >
+                      <span className="material-symbols-outlined text-[15px] text-on-surface-variant">
+                        visibility
+                      </span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Dedicated Trend Indicator Page Callout Banner */}
+              <div className="bg-primary/5 border border-primary/20 rounded-xl p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 shadow-2xs">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0">
+                    <span className="material-symbols-outlined text-[20px]">trending_up</span>
+                  </div>
+                  <div className="text-xs">
+                    <span className="font-extrabold text-on-surface">Vital Signs &amp; Weight Trend Indicators</span>
+                    <p className="text-[11px] text-on-surface-variant">View arrow trend indicators (stable, increasing, decreasing) on the dedicated Trends page.</p>
+                  </div>
+                </div>
                 <button
-                  onClick={() => handleUpdateVitals({ recordedAt: 'Just now' })}
-                  className="px-3 py-1.5 rounded-lg bg-primary text-on-primary text-xs font-bold flex items-center gap-1 cursor-pointer shadow-xs hover:bg-primary-container transition-colors"
+                  type="button"
+                  onClick={() => setActiveTab('trends')}
+                  className="px-3 py-1.5 bg-primary text-on-primary rounded-lg text-xs font-bold hover:bg-primary-container flex items-center justify-center gap-1.5 cursor-pointer transition-colors shadow-2xs shrink-0 whitespace-nowrap"
                 >
-                  <span className="material-symbols-outlined text-[15px]">refresh</span>
-                  Log Fresh Reading
+                  <span>Open Trends Page</span>
+                  <span className="material-symbols-outlined text-[14px]">arrow_forward</span>
                 </button>
               </div>
 
-              {/* Vitals Grid */}
+              {/* Vitals Input Grid */}
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                 {/* Heart Rate */}
-                <div className="bg-surface-container-low p-3.5 rounded-xl border border-outline-variant/20 flex flex-col justify-between">
+                <div className="bg-surface-container-low p-3.5 rounded-xl border border-outline-variant/20 flex flex-col justify-between shadow-2xs">
                   <div className="flex items-center justify-between text-tertiary">
-                    <span className="text-xs font-extrabold uppercase">Heart Rate</span>
+                    <span className="text-xs font-extrabold uppercase tracking-wide">Heart Rate</span>
                     <span className="material-symbols-outlined text-[18px]">favorite</span>
                   </div>
                   <div className="flex items-baseline gap-1 mt-2">
@@ -807,13 +1041,27 @@ export const PatientChartModal: React.FC<PatientChartModalProps> = ({
                     />
                     <span className="text-xs font-bold text-on-surface-variant">bpm</span>
                   </div>
-                  <span className="text-[10px] text-emerald-700 font-bold mt-1">Normal (60-100)</span>
+                  <div className="flex items-center justify-between mt-1">
+                    <span
+                      className={`text-[10px] font-bold ${
+                        profile.vitals.heartRate < 60 || profile.vitals.heartRate > 100
+                          ? 'text-amber-600'
+                          : 'text-emerald-700'
+                      }`}
+                    >
+                      {profile.vitals.heartRate > 100
+                        ? 'Tachycardia (>100)'
+                        : profile.vitals.heartRate < 60
+                        ? 'Bradycardia (<60)'
+                        : 'Normal (60-100)'}
+                    </span>
+                  </div>
                 </div>
 
                 {/* Blood Pressure */}
-                <div className="bg-surface-container-low p-3.5 rounded-xl border border-outline-variant/20 flex flex-col justify-between">
+                <div className="bg-surface-container-low p-3.5 rounded-xl border border-outline-variant/20 flex flex-col justify-between shadow-2xs">
                   <div className="flex items-center justify-between text-indigo-700">
-                    <span className="text-xs font-extrabold uppercase">Blood Pressure</span>
+                    <span className="text-xs font-extrabold uppercase tracking-wide">Blood Pressure</span>
                     <span className="material-symbols-outlined text-[18px]">speed</span>
                   </div>
                   <div className="flex items-baseline gap-1 mt-2">
@@ -832,13 +1080,31 @@ export const PatientChartModal: React.FC<PatientChartModalProps> = ({
                     />
                     <span className="text-xs font-bold text-on-surface-variant">mmHg</span>
                   </div>
-                  <span className="text-[10px] text-emerald-700 font-bold mt-1">Normotensive</span>
+                  <div className="flex items-center justify-between mt-1">
+                    <span
+                      className={`text-[10px] font-bold ${
+                        profile.vitals.bloodPressureSys >= 140 || profile.vitals.bloodPressureDia >= 90
+                          ? 'text-amber-600'
+                          : profile.vitals.bloodPressureSys < 90
+                          ? 'text-red-600'
+                          : 'text-emerald-700'
+                      }`}
+                    >
+                      {profile.vitals.bloodPressureSys >= 140
+                        ? 'Stage 2 HTN'
+                        : profile.vitals.bloodPressureSys >= 130
+                        ? 'Stage 1 HTN'
+                        : profile.vitals.bloodPressureSys < 90
+                        ? 'Hypotension'
+                        : 'Normotensive'}
+                    </span>
+                  </div>
                 </div>
 
                 {/* SpO2 */}
-                <div className="bg-surface-container-low p-3.5 rounded-xl border border-outline-variant/20 flex flex-col justify-between">
+                <div className="bg-surface-container-low p-3.5 rounded-xl border border-outline-variant/20 flex flex-col justify-between shadow-2xs">
                   <div className="flex items-center justify-between text-sky-700">
-                    <span className="text-xs font-extrabold uppercase">Oxygen (SpO2)</span>
+                    <span className="text-xs font-extrabold uppercase tracking-wide">Oxygen (SpO2)</span>
                     <span className="material-symbols-outlined text-[18px]">air</span>
                   </div>
                   <div className="flex items-baseline gap-1 mt-2">
@@ -852,13 +1118,25 @@ export const PatientChartModal: React.FC<PatientChartModalProps> = ({
                     />
                     <span className="text-xs font-bold text-on-surface-variant">%</span>
                   </div>
-                  <span className="text-[10px] text-emerald-700 font-bold mt-1">Target ≥ 94%</span>
+                  <div className="flex items-center justify-between mt-1">
+                    <span
+                      className={`text-[10px] font-bold ${
+                        profile.vitals.spO2 < 92
+                          ? 'text-red-600'
+                          : profile.vitals.spO2 < 95
+                          ? 'text-amber-600'
+                          : 'text-emerald-700'
+                      }`}
+                    >
+                      {profile.vitals.spO2 < 92 ? 'Hypoxia Alert (<92%)' : 'Target ≥ 94%'}
+                    </span>
+                  </div>
                 </div>
 
                 {/* Respiratory Rate */}
-                <div className="bg-surface-container-low p-3.5 rounded-xl border border-outline-variant/20 flex flex-col justify-between">
+                <div className="bg-surface-container-low p-3.5 rounded-xl border border-outline-variant/20 flex flex-col justify-between shadow-2xs">
                   <div className="flex items-center justify-between text-teal-700">
-                    <span className="text-xs font-extrabold uppercase">Resp Rate</span>
+                    <span className="text-xs font-extrabold uppercase tracking-wide">Resp Rate</span>
                     <span className="material-symbols-outlined text-[18px]">lungs</span>
                   </div>
                   <div className="flex items-baseline gap-1 mt-2">
@@ -874,9 +1152,9 @@ export const PatientChartModal: React.FC<PatientChartModalProps> = ({
                 </div>
 
                 {/* Body Temperature */}
-                <div className="bg-surface-container-low p-3.5 rounded-xl border border-outline-variant/20 flex flex-col justify-between">
+                <div className="bg-surface-container-low p-3.5 rounded-xl border border-outline-variant/20 flex flex-col justify-between shadow-2xs">
                   <div className="flex items-center justify-between text-amber-700">
-                    <span className="text-xs font-extrabold uppercase">Temp</span>
+                    <span className="text-xs font-extrabold uppercase tracking-wide">Temp</span>
                     <span className="material-symbols-outlined text-[18px]">device_thermostat</span>
                   </div>
                   <div className="flex items-baseline gap-1 mt-2">
@@ -892,13 +1170,27 @@ export const PatientChartModal: React.FC<PatientChartModalProps> = ({
                       {((profile.vitals.temperatureC * 9) / 5 + 32).toFixed(1)}°F
                     </span>
                   </div>
-                  <span className="text-[10px] text-emerald-700 font-bold mt-1">Afebrile</span>
+                  <span
+                    className={`text-[10px] font-bold mt-1 ${
+                      profile.vitals.temperatureC >= 38.0
+                        ? 'text-red-600'
+                        : profile.vitals.temperatureC < 36.0
+                        ? 'text-amber-600'
+                        : 'text-emerald-700'
+                    }`}
+                  >
+                    {profile.vitals.temperatureC >= 38.0
+                      ? 'Pyrexia / Fever'
+                      : profile.vitals.temperatureC < 36.0
+                      ? 'Hypothermic'
+                      : 'Afebrile (Norm)'}
+                  </span>
                 </div>
 
                 {/* Pain Score */}
-                <div className="bg-surface-container-low p-3.5 rounded-xl border border-outline-variant/20 flex flex-col justify-between">
+                <div className="bg-surface-container-low p-3.5 rounded-xl border border-outline-variant/20 flex flex-col justify-between shadow-2xs">
                   <div className="flex items-center justify-between text-purple-700">
-                    <span className="text-xs font-extrabold uppercase">Pain Score</span>
+                    <span className="text-xs font-extrabold uppercase tracking-wide">Pain Score</span>
                     <span className="material-symbols-outlined text-[18px]">sentiment_neutral</span>
                   </div>
                   <div className="flex items-baseline gap-1 mt-2">
@@ -912,10 +1204,20 @@ export const PatientChartModal: React.FC<PatientChartModalProps> = ({
                     />
                     <span className="text-xs font-bold text-on-surface-variant">/ 10</span>
                   </div>
-                  <span className="text-[10px] text-amber-700 font-bold mt-1">
-                    {profile.vitals.painScore <= 2
+                  <span
+                    className={`text-[10px] font-bold mt-1 ${
+                      profile.vitals.painScore >= 7
+                        ? 'text-red-600'
+                        : profile.vitals.painScore >= 4
+                        ? 'text-amber-600'
+                        : 'text-emerald-700'
+                    }`}
+                  >
+                    {profile.vitals.painScore === 0
+                      ? 'No Pain'
+                      : profile.vitals.painScore <= 3
                       ? 'Mild Pain'
-                      : profile.vitals.painScore <= 5
+                      : profile.vitals.painScore <= 6
                       ? 'Moderate Pain'
                       : 'Severe Pain'}
                   </span>
@@ -924,18 +1226,190 @@ export const PatientChartModal: React.FC<PatientChartModalProps> = ({
 
               {/* Vitals Clinical Note */}
               <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-bold text-on-surface-variant">
-                  Clinical Vitals Note:
-                </label>
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-on-surface-variant">
+                    Clinical Vitals Note (included in CSV row):
+                  </label>
+                  <span className="text-[10px] text-outline font-mono">
+                    Auto-saved to patient profile
+                  </span>
+                </div>
                 <textarea
                   rows={2}
                   value={profile.vitals.notes || ''}
                   onChange={(e) => handleUpdateVitals({ notes: e.target.value })}
-                  placeholder="e.g. Resting quietly in Fowler position, respiratory effort unlabored..."
-                  className="w-full text-xs p-3 rounded-xl border border-outline-variant/30 bg-surface-container-lowest focus:outline-primary leading-relaxed"
+                  placeholder="e.g. Resting quietly in Fowler position, respiratory effort unlabored, peripheral pulses palpable..."
+                  className="w-full text-xs p-3 rounded-xl border border-outline-variant/30 bg-surface-container-lowest focus:outline-primary leading-relaxed shadow-2xs"
                 />
               </div>
+
+              {/* Captured Vitals Timeline & Export History Table */}
+              <div className="bg-surface-container-low rounded-xl p-4 border border-outline-variant/20 flex flex-col gap-3 shadow-2xs">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <div className="flex items-center gap-2">
+                    <span className="material-symbols-outlined text-primary text-[20px]">
+                      history_toggle_off
+                    </span>
+                    <div>
+                      <h5 className="text-xs font-extrabold text-on-surface uppercase tracking-wider">
+                        Captured Vitals Timeline ({profile.vitalsHistory?.length || 1} Readings)
+                      </h5>
+                      <p className="text-[11px] text-on-surface-variant">
+                        Timestamped readings included in CSV export document
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      onClick={() => handleDownloadCsv()}
+                      className="px-2.5 py-1 text-[11px] font-extrabold text-primary hover:bg-primary/10 rounded-lg border border-primary/20 flex items-center gap-1 cursor-pointer transition-colors"
+                      title="Download all captured readings as formatted CSV"
+                    >
+                      <span className="material-symbols-outlined text-[14px]">file_download</span>
+                      <span>Export All ({profile.vitalsHistory?.length || 1})</span>
+                    </button>
+                    <button
+                      onClick={() => handleShareCsv()}
+                      disabled={isExportingCsv}
+                      className="px-2.5 py-1 text-[11px] font-extrabold text-on-surface-variant hover:text-primary hover:bg-surface-container rounded-lg border border-outline-variant/30 flex items-center gap-1 cursor-pointer transition-colors"
+                      title="Share formatted CSV directly"
+                    >
+                      <span className="material-symbols-outlined text-[14px]">share</span>
+                      <span className="hidden sm:inline">Share</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Timeline Table */}
+                <div className="overflow-x-auto rounded-lg border border-outline-variant/20 bg-surface-container-lowest">
+                  <table className="w-full text-left text-xs border-collapse">
+                    <thead>
+                      <tr className="bg-surface-container text-on-surface-variant text-[10px] sm:text-[11px] font-extrabold border-b border-outline-variant/20 uppercase tracking-wider">
+                        <th className="p-2 sm:p-2.5">Time / ID</th>
+                        <th className="p-2 sm:p-2.5">HR</th>
+                        <th className="p-2 sm:p-2.5">BP</th>
+                        <th className="p-2 sm:p-2.5">SpO2</th>
+                        <th className="p-2 sm:p-2.5">Temp</th>
+                        <th className="p-2 sm:p-2.5">Resp</th>
+                        <th className="p-2 sm:p-2.5">Pain</th>
+                        <th className="p-2 sm:p-2.5">Assessment</th>
+                        <th className="p-2 sm:p-2.5 text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-outline-variant/10 font-mono text-[11px]">
+                      {(profile.vitalsHistory && profile.vitalsHistory.length > 0
+                        ? profile.vitalsHistory
+                        : [profile.vitals]
+                      ).map((reading, idx) => {
+                        const status = getClinicalVitalsStatus(reading);
+                        const isNormal = status === 'Within Normal Limits (Stable)';
+                        return (
+                          <tr
+                            key={reading.id || idx}
+                            className="hover:bg-surface-container-low transition-colors group"
+                          >
+                            <td className="p-2 sm:p-2.5 font-bold text-on-surface whitespace-nowrap">
+                              <span className="text-[10px] text-primary block font-sans font-extrabold">
+                                {reading.id || `VIT-${String(idx + 1).padStart(3, '0')}`}
+                              </span>
+                              <span className="text-[10px] text-on-surface-variant font-sans">
+                                {reading.recordedAt}
+                              </span>
+                            </td>
+                            <td className="p-2 sm:p-2.5 whitespace-nowrap">
+                              <span className="font-black text-on-surface">{reading.heartRate}</span>{' '}
+                              <span className="text-[9px] text-on-surface-variant">bpm</span>
+                            </td>
+                            <td className="p-2 sm:p-2.5 whitespace-nowrap">
+                              <span className="font-black text-on-surface">
+                                {reading.bloodPressureSys}/{reading.bloodPressureDia}
+                              </span>
+                            </td>
+                            <td className="p-2 sm:p-2.5 whitespace-nowrap">
+                              <span
+                                className={`font-black ${
+                                  reading.spO2 < 94 ? 'text-red-600' : 'text-on-surface'
+                                }`}
+                              >
+                                {reading.spO2}%
+                              </span>
+                            </td>
+                            <td className="p-2 sm:p-2.5 whitespace-nowrap">
+                              <span className="font-bold text-on-surface">
+                                {reading.temperatureC.toFixed(1)}°C
+                              </span>
+                            </td>
+                            <td className="p-2 sm:p-2.5 whitespace-nowrap">
+                              <span className="font-bold text-on-surface">
+                                {reading.respiratoryRate}
+                              </span>
+                            </td>
+                            <td className="p-2 sm:p-2.5 whitespace-nowrap">
+                              <span className="font-bold text-on-surface">{reading.painScore}/10</span>
+                            </td>
+                            <td className="p-2 sm:p-2.5 max-w-[140px] truncate">
+                              <span
+                                className={`text-[9px] font-sans font-extrabold px-1.5 py-0.5 rounded ${
+                                  isNormal
+                                    ? 'bg-emerald-100 text-emerald-800'
+                                    : 'bg-amber-100 text-amber-800'
+                                }`}
+                              >
+                                {status}
+                              </span>
+                            </td>
+                            <td className="p-2 sm:p-2.5 text-right whitespace-nowrap">
+                              <div className="flex items-center justify-end gap-1">
+                                <button
+                                  onClick={() => handleRestoreVitals(reading)}
+                                  className="p-1 text-outline hover:text-primary hover:bg-surface-container rounded cursor-pointer transition-colors"
+                                  title="Load reading values into editor"
+                                >
+                                  <span className="material-symbols-outlined text-[15px]">
+                                    restore
+                                  </span>
+                                </button>
+                                <button
+                                  onClick={() => handleDownloadCsv([reading])}
+                                  className="p-1 text-outline hover:text-primary hover:bg-surface-container rounded cursor-pointer transition-colors"
+                                  title="Download single reading as CSV"
+                                >
+                                  <span className="material-symbols-outlined text-[15px]">
+                                    download
+                                  </span>
+                                </button>
+                                {reading.id && (
+                                  <button
+                                    onClick={() => handleDeleteVitals(reading.id)}
+                                    className="p-1 text-outline hover:text-error hover:bg-error/10 rounded cursor-pointer transition-colors"
+                                    title="Delete from history"
+                                  >
+                                    <span className="material-symbols-outlined text-[15px]">
+                                      delete
+                                    </span>
+                                  </button>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
             </div>
+          )}
+
+          {/* TAB 2.5 / SEPARATE PAGE: VITALS & BIOMETRIC TRENDS */}
+          {activeTab === 'trends' && (
+            <VitalsTrendPageView
+              profile={profile}
+              onCaptureReading={() => handleCaptureVitals()}
+              onNavigateTab={(tab) => setActiveTab(tab)}
+              onDownloadCsv={(readings) => handleDownloadCsv(readings)}
+            />
           )}
 
           {/* TAB 3: DIAGNOSTIC REPORTS */}
@@ -1650,6 +2124,93 @@ export const PatientChartModal: React.FC<PatientChartModalProps> = ({
             </button>
           </div>
         </div>
+
+        {/* CSV Preview Overlay Modal */}
+        {showCsvPreviewModal && (
+          <div className="fixed inset-0 z-60 flex items-center justify-center p-3 sm:p-5 bg-black/75 backdrop-blur-md animate-in fade-in duration-200">
+            <div className="bg-surface-container-lowest w-full max-w-xl max-h-[85vh] rounded-2xl shadow-2xl flex flex-col border border-outline-variant/30 overflow-hidden">
+              {/* Preview Header */}
+              <div className="px-5 py-4 border-b border-outline-variant/20 flex items-center justify-between bg-surface-container-low/80">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-9 h-9 rounded-xl bg-primary/10 text-primary flex items-center justify-center">
+                    <span className="material-symbols-outlined text-[20px]">table_chart</span>
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-extrabold text-on-surface">
+                      Formatted Vitals CSV Export
+                    </h4>
+                    <span className="text-[11px] font-mono text-outline">
+                      {getVitalsCsvFilename(profile)}
+                    </span>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setShowCsvPreviewModal(false)}
+                  className="w-8 h-8 rounded-full bg-surface-container hover:bg-surface-variant text-on-surface-variant flex items-center justify-center cursor-pointer transition-colors"
+                  aria-label="Close Preview"
+                >
+                  <span className="material-symbols-outlined text-[18px]">close</span>
+                </button>
+              </div>
+
+              {/* Preview Notice Bar */}
+              <div className="px-5 py-2 bg-primary/5 border-b border-primary/10 flex items-center justify-between text-[11px] text-primary font-medium">
+                <div className="flex items-center gap-1.5">
+                  <span className="material-symbols-outlined text-[15px]">verified</span>
+                  <span>RFC 4180 CSV with UTF-8 BOM • Excel &amp; Google Sheets Ready</span>
+                </div>
+                <span className="font-mono text-[10px] text-outline">
+                  {csvPreviewText.split('\n').filter(Boolean).length} rows
+                </span>
+              </div>
+
+              {/* Code Pre Box */}
+              <div className="flex-1 p-4 overflow-auto bg-neutral-900 text-neutral-100 font-mono text-[11px] leading-relaxed select-all max-h-[50vh]">
+                <pre className="whitespace-pre overflow-x-auto">{csvPreviewText}</pre>
+              </div>
+
+              {/* Preview Actions Footer */}
+              <div className="px-5 py-3.5 border-t border-outline-variant/20 bg-surface-container-low flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => handleCopyCsv()}
+                    className="px-3 py-1.5 rounded-lg border border-outline-variant/40 bg-surface-container-lowest hover:bg-surface-container text-xs font-bold text-on-surface flex items-center gap-1.5 cursor-pointer transition-colors"
+                  >
+                    <span className="material-symbols-outlined text-[15px]">content_copy</span>
+                    <span>Copy Text</span>
+                  </button>
+                  <button
+                    onClick={() => handleShareCsv()}
+                    disabled={isExportingCsv}
+                    className="px-3 py-1.5 rounded-lg border border-outline-variant/40 bg-surface-container-lowest hover:bg-surface-container text-xs font-bold text-on-surface flex items-center gap-1.5 cursor-pointer transition-colors"
+                  >
+                    <span className="material-symbols-outlined text-[15px]">share</span>
+                    <span>Share File</span>
+                  </button>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setShowCsvPreviewModal(false)}
+                    className="px-3 py-1.5 rounded-lg text-xs font-bold text-outline hover:text-on-surface hover:bg-surface-container cursor-pointer transition-colors"
+                  >
+                    Dismiss
+                  </button>
+                  <button
+                    onClick={() => {
+                      handleDownloadCsv();
+                      setShowCsvPreviewModal(false);
+                    }}
+                    className="px-4 py-1.5 rounded-lg bg-primary text-on-primary text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-xs hover:bg-primary-container transition-colors"
+                  >
+                    <span className="material-symbols-outlined text-[16px]">download</span>
+                    <span>Download CSV</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
       </div>
     </div>

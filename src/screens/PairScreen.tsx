@@ -24,8 +24,12 @@ import { ESP32HardwareModal } from '../components/ESP32HardwareModal';
 import {
   isAutoBluetoothEnabled,
   setAutoBluetoothEnabled,
+  isAutoWifiEnabled,
+  setAutoWifiEnabled,
+  autoDetectAndAdoptAllHardware,
+  autoDetectAndAdoptWifiController,
   autoDetectAndAdoptPairedBluetooth,
-} from '../services/autoBluetoothConnect';
+} from '../services/autoHardwareConnect';
 
 type DeviceItem = PairedDeviceItem;
 
@@ -104,45 +108,83 @@ export const PairScreen: React.FC<PairScreenProps> = ({
   const isAndroidApk = isNativeAndroidApp();
   const hasWebBle = isWebBluetoothSupported();
 
-  // Auto-Adopt Paired Mobile Bluetooth state & actions
+  // Auto-Adopt Hardware (Wi-Fi & Bluetooth) state & actions
   const [autoBtEnabled, setAutoBtEnabled] = useState(() => isAutoBluetoothEnabled());
-  const [isCheckingAutoBt, setIsCheckingAutoBt] = useState(false);
+  const [autoWifiEnabled, setAutoWifiEnabledState] = useState(() => isAutoWifiEnabled());
+  const [isCheckingAutoHardware, setIsCheckingAutoHardware] = useState(false);
 
   const handleToggleAutoBt = (enabled: boolean) => {
     setAutoBtEnabled(enabled);
     setAutoBluetoothEnabled(enabled);
     if (enabled) {
-      handleCheckAutoBt();
+      handleCheckAutoHardware();
     }
   };
 
-  const handleCheckAutoBt = async () => {
-    setIsCheckingAutoBt(true);
-    setPairingNotice('Querying phone Bluetooth for paired ESP32 controller...');
+  const handleToggleAutoWifi = (enabled: boolean) => {
+    setAutoWifiEnabledState(enabled);
+    setAutoWifiEnabled(enabled);
+    if (enabled) {
+      handleCheckAutoHardware();
+    }
+  };
+
+  const handleCheckAutoHardware = async () => {
+    setIsCheckingAutoHardware(true);
+    setPairingNotice('Scanning for connected ESP32 Wi-Fi & phone Bluetooth controller...');
     try {
-      const result = await autoDetectAndAdoptPairedBluetooth();
+      const result = await autoDetectAndAdoptAllHardware();
       if (result && result.adopted) {
         setBedState((prev) => ({
           ...prev,
-          connectedBedId: result.deviceName,
-          bleSynced: true,
-          wifiConnected: result.transport === 'wifi' || result.transport === 'dual',
+          connectedBedId: result.primaryDeviceName,
+          bleSynced: result.mode === 'ble' || result.mode === 'dual',
+          wifiConnected: result.mode === 'wifi' || result.mode === 'dual',
         }));
-        setSelectedBed(result.deviceName);
+        setSelectedBed(result.primaryDeviceName);
         setPairingNotice(result.message);
         setTimeout(() => {
           setPairingNotice(null);
           onPairSuccess();
-        }, 1200);
+        }, 1500);
       } else {
-        setPairingNotice('No previously paired controller found in phone Bluetooth. You can scan below.');
-        setTimeout(() => setPairingNotice(null), 3500);
+        setPairingNotice('No controller auto-detected on Wi-Fi (192.168.4.x) or phone Bluetooth. Use direct connect options below.');
+        setTimeout(() => setPairingNotice(null), 4000);
       }
     } catch {
-      setPairingNotice('Could not query phone Bluetooth. Use direct scan below.');
+      setPairingNotice('Auto-detection completed. Use direct connect options below.');
       setTimeout(() => setPairingNotice(null), 3500);
     } finally {
-      setIsCheckingAutoBt(false);
+      setIsCheckingAutoHardware(false);
+    }
+  };
+
+  const handleCheckAutoWifi = async () => {
+    setIsCheckingAutoHardware(true);
+    setPairingNotice('Probing Wi-Fi controller at 192.168.4.1/2 & local network...');
+    try {
+      const res = await autoDetectAndAdoptWifiController();
+      if (res && res.adopted) {
+        setBedState((prev) => ({
+          ...prev,
+          connectedBedId: res.deviceName,
+          wifiConnected: true,
+        }));
+        setSelectedBed(res.deviceName);
+        setPairingNotice(res.message);
+        setTimeout(() => {
+          setPairingNotice(null);
+          onPairSuccess();
+        }, 1500);
+      } else {
+        setPairingNotice('No Wi-Fi controller answered at 192.168.4.x. Verify your phone is joined to the bed hotspot.');
+        setTimeout(() => setPairingNotice(null), 4000);
+      }
+    } catch {
+      setPairingNotice('Wi-Fi probe completed.');
+      setTimeout(() => setPairingNotice(null), 3500);
+    } finally {
+      setIsCheckingAutoHardware(false);
     }
   };
 
@@ -699,58 +741,96 @@ export const PairScreen: React.FC<PairScreenProps> = ({
         </div>
       </div>
 
-      {/* Phone Bluetooth OS Auto-Sync Card */}
+      {/* Smart Auto-Adopt Card (Wi-Fi & Bluetooth) */}
       <div className="bg-primary/5 rounded-xl p-3.5 border border-primary/25 shadow-2xs flex flex-col gap-2.5">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <span className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-primary shrink-0">
-              <span className="material-symbols-outlined text-[20px]">bluetooth_connected</span>
+              <span className="material-symbols-outlined text-[20px]">
+                {bedState.wifiConnected && bedState.bleSynced ? 'hub' : bedState.wifiConnected ? 'wifi' : 'bluetooth_connected'}
+              </span>
             </span>
             <div>
-              <div className="flex items-center gap-1.5">
+              <div className="flex items-center gap-1.5 flex-wrap">
                 <h3 className="text-xs font-bold text-on-surface">
-                  Phone Bluetooth Auto-Adopt
+                  Smart Zero-Touch Auto-Pair
                 </h3>
                 <span className="text-[9px] font-extrabold bg-primary text-on-primary px-1.5 py-0.2 rounded-full uppercase">
-                  Zero Pairing
+                  Wi-Fi + Bluetooth
                 </span>
               </div>
               <p className="text-[11px] text-on-surface-variant leading-tight mt-0.5">
-                Already paired in your mobile phone&apos;s Bluetooth settings? App takes it as default!
+                Already connected to Bed Wi-Fi or paired in phone Bluetooth? App takes it as default!
               </p>
             </div>
           </div>
+        </div>
 
-          <label className="relative inline-flex items-center cursor-pointer shrink-0">
+        {/* Dual Toggles: Wi-Fi Hotspot & Phone Bluetooth */}
+        <div className="grid grid-cols-2 gap-2 pt-1 border-t border-primary/15">
+          <label className="flex items-center justify-between p-2 rounded-lg bg-surface-container-low border border-outline-variant/20 cursor-pointer">
+            <div className="flex items-center gap-1.5">
+              <span className="material-symbols-outlined text-[16px] text-primary">wifi</span>
+              <div>
+                <span className="text-[11px] font-bold text-on-surface block leading-tight">
+                  Auto Wi-Fi
+                </span>
+                <span className="text-[9px] text-on-surface-variant">192.168.4.x / LAN</span>
+              </div>
+            </div>
+            <input
+              type="checkbox"
+              checked={autoWifiEnabled}
+              onChange={(e) => handleToggleAutoWifi(e.target.checked)}
+              className="accent-primary w-4 h-4 cursor-pointer"
+            />
+          </label>
+
+          <label className="flex items-center justify-between p-2 rounded-lg bg-surface-container-low border border-outline-variant/20 cursor-pointer">
+            <div className="flex items-center gap-1.5">
+              <span className="material-symbols-outlined text-[16px] text-primary">bluetooth_connected</span>
+              <div>
+                <span className="text-[11px] font-bold text-on-surface block leading-tight">
+                  Auto Phone BLE
+                </span>
+                <span className="text-[9px] text-on-surface-variant">OS Paired Devices</span>
+              </div>
+            </div>
             <input
               type="checkbox"
               checked={autoBtEnabled}
               onChange={(e) => handleToggleAutoBt(e.target.checked)}
-              className="sr-only peer"
+              className="accent-primary w-4 h-4 cursor-pointer"
             />
-            <div className="w-9 h-5 bg-surface-container-highest peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-primary"></div>
           </label>
         </div>
 
+        {/* Status Line & Trigger Button */}
         <div className="flex items-center justify-between gap-2 pt-1 border-t border-primary/15">
-          <div className="flex items-center gap-1.5 text-[11px] text-on-surface-variant">
-            <span className={`w-2 h-2 rounded-full ${bedState.bleSynced ? 'bg-emerald-500' : 'bg-outline-variant'}`} />
-            <span>
-              {bedState.bleSynced
-                ? `Default Active: ${bedState.connectedBedId}`
-                : 'No phone-bonded controller active'}
+          <div className="flex items-center gap-1.5 text-[11px] text-on-surface-variant truncate">
+            <span
+              className={`w-2 h-2 rounded-full shrink-0 ${
+                bedState.wifiConnected || bedState.bleSynced ? 'bg-emerald-500' : 'bg-outline-variant'
+              }`}
+            />
+            <span className="truncate">
+              {bedState.wifiConnected || bedState.bleSynced
+                ? `Active: ${bedState.connectedBedId} (${bedState.wifiConnected ? 'Wi-Fi' : ''}${
+                    bedState.wifiConnected && bedState.bleSynced ? ' + ' : ''
+                  }${bedState.bleSynced ? 'BLE' : ''})`
+                : 'No bed active yet'}
             </span>
           </div>
 
           <button
-            onClick={handleCheckAutoBt}
-            disabled={isCheckingAutoBt}
-            className="px-2.5 py-1 rounded-lg bg-primary hover:bg-primary-container text-on-primary font-bold text-[11px] flex items-center gap-1 cursor-pointer transition-all active:scale-98 shadow-2xs"
+            onClick={handleCheckAutoHardware}
+            disabled={isCheckingAutoHardware}
+            className="px-2.5 py-1 rounded-lg bg-primary hover:bg-primary-container text-on-primary font-bold text-[11px] flex items-center gap-1 cursor-pointer transition-all active:scale-98 shadow-2xs shrink-0"
           >
-            <span className={`material-symbols-outlined text-[14px] ${isCheckingAutoBt ? 'animate-spin' : ''}`}>
+            <span className={`material-symbols-outlined text-[14px] ${isCheckingAutoHardware ? 'animate-spin' : ''}`}>
               sync
             </span>
-            <span>{isCheckingAutoBt ? 'Checking...' : 'Check Phone Bluetooth'}</span>
+            <span>{isCheckingAutoHardware ? 'Detecting...' : 'Auto-Detect Bed'}</span>
           </button>
         </div>
       </div>
@@ -1021,9 +1101,16 @@ export const PairScreen: React.FC<PairScreenProps> = ({
                   </span>
                 </div>
               </div>
-              <span className="text-[10px] font-extrabold bg-primary text-on-primary px-2 py-0.5 rounded-full uppercase">
-                Active
-              </span>
+              <button
+                onClick={handleCheckAutoWifi}
+                disabled={isCheckingAutoHardware}
+                className="text-[10px] font-extrabold bg-primary hover:bg-primary-container text-on-primary px-2.5 py-1 rounded-lg flex items-center gap-1 cursor-pointer transition-all active:scale-98 shadow-2xs"
+              >
+                <span className={`material-symbols-outlined text-[13px] ${isCheckingAutoHardware ? 'animate-spin' : ''}`}>
+                  sync
+                </span>
+                <span>{isCheckingAutoHardware ? 'Probing...' : 'Auto-Detect'}</span>
+              </button>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1">

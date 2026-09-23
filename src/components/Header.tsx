@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { BedState, PairedDeviceItem } from '../types';
+import { BedState, PairedDeviceItem, PatientChartTabKey } from '../types';
 import { MarqLogo } from './MarqLogo';
 import { getPairedDevices, removePairedDevice } from '../services/pairedDevicesStorage';
 
@@ -11,7 +11,7 @@ interface HeaderProps {
   onToggleCharging?: () => void;
   onNavigateToPair?: () => void;
   onUnpairBed?: (bedId: string) => void;
-  onOpenPatientChart?: (tab?: 'vitals' | 'mass' | 'diagnostic' | 'medication' | 'doctor' | 'emergency') => void;
+  onOpenPatientChart?: (tab?: PatientChartTabKey) => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -69,6 +69,11 @@ export const Header: React.FC<HeaderProps> = ({
                 onClick={() => setShowBedMenu(!showBedMenu)}
                 className="flex items-center gap-1 px-2 sm:px-2.5 py-0.5 sm:py-1 rounded-full bg-surface-container hover:bg-surface-variant transition-colors min-h-[28px] sm:min-h-[32px] cursor-pointer"
               >
+                {bedState.wifiConnected && (
+                  <span className="material-symbols-outlined text-[14px] text-primary" title="Wi-Fi Connected">
+                    wifi
+                  </span>
+                )}
                 {bedState.bleSynced && (
                   <span className="material-symbols-outlined text-[14px] text-primary" title="Bluetooth Linked">
                     bluetooth_connected

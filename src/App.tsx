@@ -4,7 +4,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { BedState, ScreenType } from './types';
+import { BedState, ScreenType, PatientChartTabKey } from './types';
 import { Header } from './components/Header';
 import { BottomNav } from './components/BottomNav';
 import { NurseCallModal } from './components/NurseCallModal';
@@ -17,7 +17,10 @@ import { AdvancedScreen } from './screens/AdvancedScreen';
 import { PairScreen } from './screens/PairScreen';
 import { SettingsScreen } from './screens/SettingsScreen';
 import { removePairedDevice } from './services/pairedDevicesStorage';
-import { autoDetectAndAdoptPairedBluetooth, AutoAdoptResult } from './services/autoBluetoothConnect';
+import {
+  autoDetectAndAdoptAllHardware,
+  UnifiedAutoAdoptResult,
+} from './services/autoHardwareConnect';
 
 export default function App() {
   const [currentScreen, setCurrentScreen] = useState<ScreenType>('home');
@@ -25,26 +28,24 @@ export default function App() {
   const [isEStopModalOpen, setIsEStopModalOpen] = useState(false);
   const [isApkModalOpen, setIsApkModalOpen] = useState(false);
   const [isPatientModalOpen, setIsPatientModalOpen] = useState(false);
-  const [patientModalTab, setPatientModalTab] = useState<
-    'vitals' | 'mass' | 'diagnostic' | 'medication' | 'doctor' | 'emergency'
-  >('mass');
-  const [autoAdoptNotice, setAutoAdoptNotice] = useState<AutoAdoptResult | null>(null);
+  const [patientModalTab, setPatientModalTab] = useState<PatientChartTabKey>('mass');
+  const [autoAdoptNotice, setAutoAdoptNotice] = useState<UnifiedAutoAdoptResult | null>(null);
 
-  // Auto-detect and adopt phone Bluetooth controller if already paired in Android/OS
+  // Auto-detect and adopt Wi-Fi or phone Bluetooth controller if already connected/paired
   useEffect(() => {
     let isMounted = true;
-    autoDetectAndAdoptPairedBluetooth().then((result) => {
+    autoDetectAndAdoptAllHardware().then((result) => {
       if (isMounted && result && result.adopted) {
         setAutoAdoptNotice(result);
         setBedState((prev) => ({
           ...prev,
-          connectedBedId: result.deviceName,
-          bleSynced: true,
-          wifiConnected: result.transport === 'wifi' || result.transport === 'dual',
+          connectedBedId: result.primaryDeviceName,
+          bleSynced: result.mode === 'ble' || result.mode === 'dual',
+          wifiConnected: result.mode === 'wifi' || result.mode === 'dual',
         }));
         setTimeout(() => {
           if (isMounted) setAutoAdoptNotice(null);
-        }, 8000);
+        }, 9000);
       }
     });
     return () => {
@@ -149,9 +150,7 @@ export default function App() {
 
   const isLowBattery = bedState.batteryPercent < (bedState.lowBatteryThreshold ?? 20);
 
-  const handleOpenPatientChart = (
-    tab?: 'vitals' | 'mass' | 'diagnostic' | 'medication' | 'doctor' | 'emergency'
-  ) => {
+  const handleOpenPatientChart = (tab?: PatientChartTabKey) => {
     if (tab) {
       setPatientModalTab(tab);
     }
@@ -184,26 +183,38 @@ export default function App() {
           isLowBattery ? 'pt-44' : 'pt-32'
         } pb-36 max-w-lg mx-auto transition-all duration-200`}
       >
-        {/* Mobile Bluetooth Auto-Adopted Notification */}
+        {/* Hardware Auto-Adopted Notification (Wi-Fi or Bluetooth) */}
         {autoAdoptNotice && (
           <div className="mb-3.5 p-3 rounded-xl bg-primary text-on-primary shadow-md border border-primary-container/30 flex items-center justify-between gap-2.5 animate-in slide-in-from-top-2 duration-300">
             <div className="flex items-center gap-2.5">
               <span className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center shrink-0">
                 <span className="material-symbols-outlined text-white text-[20px]">
-                  bluetooth_connected
+                  {autoAdoptNotice.mode === 'dual'
+                    ? 'hub'
+                    : autoAdoptNotice.mode === 'wifi'
+                    ? 'wifi'
+                    : 'bluetooth_connected'}
                 </span>
               </span>
               <div>
                 <div className="flex items-center gap-1.5">
                   <span className="text-xs font-bold leading-tight">
-                    Phone Bluetooth Auto-Linked
+                    {autoAdoptNotice.mode === 'dual'
+                      ? 'Dual-Link Auto-Connected'
+                      : autoAdoptNotice.mode === 'wifi'
+                      ? 'Wi-Fi Controller Auto-Connected'
+                      : 'Phone Bluetooth Auto-Linked'}
                   </span>
                   <span className="text-[9px] font-extrabold px-1.5 py-0.2 rounded-full bg-white/25 uppercase tracking-wider">
-                    OS Paired
+                    {autoAdoptNotice.mode === 'dual'
+                      ? 'Wi-Fi + BLE'
+                      : autoAdoptNotice.mode === 'wifi'
+                      ? 'SoftAP / LAN'
+                      : 'OS Paired'}
                   </span>
                 </div>
                 <p className="text-[11px] text-white/90 leading-tight mt-0.5">
-                  <strong>{autoAdoptNotice.deviceName}</strong> is already paired to this device. Default bed connection active — no pairing required!
+                  <strong>{autoAdoptNotice.primaryDeviceName}</strong>: {autoAdoptNotice.message}
                 </p>
               </div>
             </div>

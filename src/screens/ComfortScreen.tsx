@@ -1,12 +1,12 @@
 import React, { useState } from 'react';
-import { BedState } from '../types';
+import { BedState, PatientChartTabKey } from '../types';
 
 interface ComfortScreenProps {
   bedState: BedState;
   setBedState: React.Dispatch<React.SetStateAction<BedState>>;
   onTriggerEStop: () => void;
   onTriggerNurseCall: () => void;
-  onOpenPatientChart?: (tab?: 'vitals' | 'mass' | 'diagnostic' | 'medication' | 'doctor' | 'emergency') => void;
+  onOpenPatientChart?: (tab?: PatientChartTabKey) => void;
 }
 
 export const ComfortScreen: React.FC<ComfortScreenProps> = ({

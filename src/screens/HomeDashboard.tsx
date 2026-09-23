@@ -1,5 +1,5 @@
 import React, { useRef, useEffect, useState } from 'react';
-import { BedState, PatientProfile } from '../types';
+import { BedState, PatientProfile, PatientChartTabKey } from '../types';
 import { BedVisualizer } from '../components/BedVisualizer';
 import { getPatientProfile } from '../services/patientStorage';
 import { getContactDetails, ContactDetails } from '../services/contactStorage';
@@ -10,7 +10,7 @@ interface HomeDashboardProps {
   setBedState: React.Dispatch<React.SetStateAction<BedState>>;
   onTriggerEStop: () => void;
   onTriggerNurseCall: () => void;
-  onOpenPatientChart?: (tab?: 'vitals' | 'mass' | 'diagnostic' | 'medication' | 'doctor' | 'emergency') => void;
+  onOpenPatientChart?: (tab?: PatientChartTabKey) => void;
 }
 
 export const HomeDashboard: React.FC<HomeDashboardProps> = ({
@@ -487,6 +487,15 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
               >
                 <span className="material-symbols-outlined text-[13px] text-tertiary">ecg_heart</span>
                 <span>Vitals</span>
+              </button>
+
+              <button
+                onClick={() => onOpenPatientChart('trends')}
+                className="px-2 py-1 rounded-md bg-primary/10 hover:bg-primary/20 text-[10px] font-bold text-primary whitespace-nowrap flex items-center gap-1 cursor-pointer transition-colors"
+                title="View arrow trend indicators and comparative deltas"
+              >
+                <span className="material-symbols-outlined text-[13px]">trending_up</span>
+                <span>Trends</span>
               </button>
 
               <button

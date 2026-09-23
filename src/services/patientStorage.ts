@@ -1,4 +1,4 @@
-import { PatientProfile } from '../types';
+import { PatientProfile, VitalsReading } from '../types';
 
 export const DEFAULT_PATIENT_PROFILE: PatientProfile = {
   bedId: 'ICU Bed 03',
@@ -14,6 +14,7 @@ export const DEFAULT_PATIENT_PROFILE: PatientProfile = {
   stability: 'Stable',
   mobility: 'Assisted Turn',
   vitals: {
+    id: 'VIT-004',
     heartRate: 74,
     bloodPressureSys: 122,
     bloodPressureDia: 78,
@@ -21,9 +22,64 @@ export const DEFAULT_PATIENT_PROFILE: PatientProfile = {
     respiratoryRate: 16,
     temperatureC: 36.8,
     painScore: 2,
+    weightKg: 72.4,
     recordedAt: 'Today, 07:45 AM',
     notes: 'Resting comfortably in cardiac chair incline. No respiratory distress.',
   },
+  vitalsHistory: [
+    {
+      id: 'VIT-004',
+      heartRate: 74,
+      bloodPressureSys: 122,
+      bloodPressureDia: 78,
+      spO2: 98,
+      respiratoryRate: 16,
+      temperatureC: 36.8,
+      painScore: 2,
+      weightKg: 72.4,
+      recordedAt: 'Today, 07:45 AM',
+      notes: 'Morning nursing shift check. Resting comfortably in Fowler position.',
+    },
+    {
+      id: 'VIT-003',
+      heartRate: 76,
+      bloodPressureSys: 124,
+      bloodPressureDia: 80,
+      spO2: 97,
+      respiratoryRate: 17,
+      temperatureC: 36.9,
+      painScore: 3,
+      weightKg: 72.8,
+      recordedAt: 'Today, 04:00 AM',
+      notes: 'Nocturnal check. Slept 5 hours. Mild incision tenderness.',
+    },
+    {
+      id: 'VIT-002',
+      heartRate: 80,
+      bloodPressureSys: 128,
+      bloodPressureDia: 82,
+      spO2: 97,
+      respiratoryRate: 18,
+      temperatureC: 37.1,
+      painScore: 3,
+      weightKg: 73.1,
+      recordedAt: 'Yesterday, 22:00 PM',
+      notes: 'Evening shift vitals. Paracetamol administered with good effect.',
+    },
+    {
+      id: 'VIT-001',
+      heartRate: 82,
+      bloodPressureSys: 130,
+      bloodPressureDia: 84,
+      spO2: 96,
+      respiratoryRate: 18,
+      temperatureC: 37.2,
+      painScore: 4,
+      weightKg: 73.5,
+      recordedAt: 'Yesterday, 16:30 PM',
+      notes: 'Post-op Day 1 baseline following physician rounding.',
+    },
+  ],
   diagnosticReports: [
     {
       id: 'rep-01',
@@ -230,11 +286,67 @@ export function getPatientProfile(bedId: string = 'ICU Bed 03'): PatientProfile 
     if (!parsed.googleSheetConfig) {
       parsed.googleSheetConfig = DEFAULT_PATIENT_PROFILE.googleSheetConfig;
     }
+    if (!parsed.vitalsHistory || !Array.isArray(parsed.vitalsHistory) || parsed.vitalsHistory.length === 0) {
+      parsed.vitalsHistory = DEFAULT_PATIENT_PROFILE.vitalsHistory;
+    } else {
+      // Ensure each reading has weightKg populated for trend calculations
+      parsed.vitalsHistory = parsed.vitalsHistory.map((vh, idx) => ({
+        ...vh,
+        weightKg: vh.weightKg ?? (idx === 0 ? parsed.massKg : parsed.massKg + idx * 0.3),
+      }));
+    }
+    if (parsed.vitals && parsed.vitals.weightKg === undefined) {
+      parsed.vitals.weightKg = parsed.massKg;
+    }
     return parsed;
   } catch (err) {
     console.error('Failed to load patient profile:', err);
     return DEFAULT_PATIENT_PROFILE;
   }
+}
+
+/**
+ * Captures a new timestamped vitals snapshot into vitalsHistory,
+ * updates the current vitals, logs an audit entry, and saves the profile.
+ */
+export function capturePatientVitals(
+  profile: PatientProfile,
+  readingPatch?: Partial<VitalsReading>,
+  authorizedBy: string = 'Authorized Clinician'
+): { profile: PatientProfile; capturedReading: VitalsReading } {
+  const current = profile.vitals;
+  const now = new Date();
+  const timeStr = 'Today, ' + now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const count = (profile.vitalsHistory?.length || 0) + 1;
+  const newId = `VIT-${String(count).padStart(3, '0')}`;
+
+  const captured: VitalsReading = {
+    ...current,
+    weightKg: readingPatch?.weightKg ?? current.weightKg ?? profile.massKg,
+    ...readingPatch,
+    id: newId,
+    recordedAt: timeStr,
+    recordedTimestamp: now.getTime(),
+  };
+
+  const updatedHistory = [captured, ...(profile.vitalsHistory || [])];
+
+  const updatedProfile: PatientProfile = {
+    ...profile,
+    vitals: captured,
+    vitalsHistory: updatedHistory,
+  };
+
+  logPatientAction(updatedProfile, {
+    category: 'Vitals',
+    action: 'CREATE',
+    fieldName: `Clinical Vitals Captured (${captured.id})`,
+    previousValue: `${current.heartRate} bpm, ${current.bloodPressureSys}/${current.bloodPressureDia} mmHg, ${current.spO2}%`,
+    newValue: `${captured.heartRate} bpm, ${captured.bloodPressureSys}/${captured.bloodPressureDia} mmHg, ${captured.spO2}%, Temp: ${captured.temperatureC}°C`,
+    authorizedBy,
+  });
+
+  return { profile: updatedProfile, capturedReading: captured };
 }
 
 export function savePatientProfile(profile: PatientProfile): void {

@@ -46,8 +46,17 @@ export interface BedState {
 export type StabilityLevel = 'Stable' | 'Guarded' | 'Critical' | 'Post-Op Monitoring' | 'Observation';
 export type MobilityLevel = 'Independent' | 'Assisted Turn' | 'Total Bedbound' | 'Bed-to-Chair Assist';
 export type CodeStatusType = 'FULL CODE' | 'DNR' | 'DNI' | 'Comfort Care / Palliative';
+export type PatientChartTabKey =
+  | 'mass'
+  | 'vitals'
+  | 'trends'
+  | 'diagnostic'
+  | 'medication'
+  | 'doctor'
+  | 'emergency';
 
 export interface VitalsReading {
+  id?: string;
   heartRate: number;        // bpm (e.g. 74)
   bloodPressureSys: number; // mmHg (e.g. 120)
   bloodPressureDia: number; // mmHg (e.g. 78)
@@ -55,7 +64,9 @@ export interface VitalsReading {
   respiratoryRate: number;  // breaths/min (e.g. 16)
   temperatureC: number;     // °C (e.g. 36.8)
   painScore: number;        // 0-10 (e.g. 2)
+  weightKg?: number;        // kg body mass (e.g. 72.4)
   recordedAt: string;       // e.g. "Today, 08:00 AM"
+  recordedTimestamp?: number;
   notes?: string;
 }
 
@@ -137,6 +148,7 @@ export interface PatientProfile {
   stability: StabilityLevel;
   mobility: MobilityLevel;
   vitals: VitalsReading;
+  vitalsHistory?: VitalsReading[];
   diagnosticReports: DiagnosticReport[];
   medications: MedicationRecord[];
   doctorVisits: DoctorVisitLog[];
