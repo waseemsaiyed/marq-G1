@@ -3,22 +3,25 @@
  * Supports:
  * 1. Native Android BLE via @capacitor-community/bluetooth-le (in APK)
  * 2. Web Bluetooth API (in Chrome/Edge browsers)
- * 3. Local Wi-Fi Subnet & ESP32 SoftAP (192.168.4.1) HTTP/WS Probing
+ * 3. Classic Bluetooth (SPP) via @capacitor-community/bluetooth-serial — CM41M_BT's actual transport
+ * 4. Local Wi-Fi Subnet & ESP32 SoftAP (192.168.4.1) HTTP/WS Probing
  */
 
 import { BleClient, ScanResult } from '@capacitor-community/bluetooth-le';
+import { BluetoothSerial } from '@capacitor-community/bluetooth-serial';
 
 export interface DiscoveredController {
   id: string;
   name: string;
   mac: string;
-  type: 'ble' | 'wifi' | 'dual';
+  type: 'ble' | 'classic-bt' | 'wifi' | 'dual';
   signal: string;
   rssi: number;
   battery: string;
   ip?: string;
   port?: number;
   isSoftAp?: boolean;
+  isBonded?: boolean;
   statusText: string;
   room?: string;
   patient?: string;
@@ -26,7 +29,7 @@ export interface DiscoveredController {
 
 export interface ScanStatus {
   isScanning: boolean;
-  engine: 'capacitor-ble' | 'web-bluetooth' | 'wifi-subnet' | 'idle';
+  engine: 'capacitor-ble' | 'web-bluetooth' | 'classic-bt' | 'wifi-subnet' | 'idle';
   message: string;
   error?: string;
   bluetoothEnabled?: boolean;
@@ -54,8 +57,93 @@ export function isWebBluetoothSupported(): boolean {
 }
 
 /**
+ * Lists already-bonded Classic Bluetooth (SPP) devices — this is how
+ * CM41M_BT is found. Classic Bluetooth has no "nearby scan" comparable
+ * to BLE; the device must be paired in Android system Settings first,
+ * then it shows up here as bonded.
+ */
+export async function scanClassicBluetoothBonded(
+  onDeviceFound: (device: DiscoveredController) => void,
+  onStatusUpdate: (status: ScanStatus) => void
+): Promise<void> {
+  try {
+    onStatusUpdate({
+      isScanning: true,
+      engine: 'classic-bt',
+      message: 'Checking Classic Bluetooth (paired devices)...',
+    });
+
+    const { enabled } = await BluetoothSerial.isEnabled();
+    if (!enabled) {
+      onStatusUpdate({
+        isScanning: true,
+        engine: 'classic-bt',
+        message: 'Bluetooth is OFF. Requesting activation...',
+        bluetoothEnabled: false,
+      });
+      try {
+        await BluetoothSerial.enable();
+      } catch {
+        throw new Error('Bluetooth activation denied. Please turn on Bluetooth manually.');
+      }
+    }
+
+    const { devices } = await BluetoothSerial.list();
+
+    if (!devices || devices.length === 0) {
+      onStatusUpdate({
+        isScanning: false,
+        engine: 'idle',
+        message: 'No paired Bluetooth devices found. Pair "CM41M_BT" in Android Settings > Bluetooth first.',
+        bluetoothEnabled: true,
+      });
+      return;
+    }
+
+    for (const d of devices) {
+      const controller: DiscoveredController = {
+        id: d.address,
+        name: d.name || 'CM41M_BT',
+        mac: d.address,
+        type: 'classic-bt',
+        signal: 'Bonded (Classic BT)',
+        rssi: -40,
+        battery: '100%',
+        isBonded: true,
+        statusText: 'Paired — Classic Bluetooth (SPP)',
+        room: 'Local Bedside',
+        patient: 'Detected Patient',
+      };
+      onDeviceFound(controller);
+    }
+
+    onStatusUpdate({
+      isScanning: false,
+      engine: 'idle',
+      message: `Found ${devices.length} paired Bluetooth device(s).`,
+      bluetoothEnabled: true,
+      permissionsGranted: true,
+    });
+  } catch (err: any) {
+    console.warn('[Classic BT Scan Error]', err);
+    onStatusUpdate({
+      isScanning: false,
+      engine: 'idle',
+      message: err.message || 'Classic Bluetooth scan could not be initiated.',
+      error: err.message || 'Bluetooth error',
+    });
+    throw err;
+  }
+}
+
+/**
  * Initializes and requests Native Android Bluetooth scan
  * Enhanced with automated legacy BLE 4.0/4.1/4.2 compatibility
+ *
+ * NOTE: This only discovers BLE-advertising devices. CM41M_BT is a
+ * Classic Bluetooth (SPP) device and will NOT appear here — use
+ * scanClassicBluetoothBonded() for that controller. Keep this scan for
+ * any future BLE-only hardware you add.
  */
 export async function scanNativeCapacitorBle(
   onDeviceFound: (device: DiscoveredController) => void,
@@ -297,4 +385,3 @@ export async function probeLocalIp(
     return null;
   }
 }
-
