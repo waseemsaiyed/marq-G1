@@ -13,6 +13,7 @@
  */
 
 import { BleClient } from '@capacitor-community/bluetooth-le';
+import { BluetoothSerial } from '@capacitor-community/bluetooth-serial';
 
 export type ActuatorTarget = 'head' | 'knee' | 'height' | 'tilt' | 'estop' | 'preset' | 'light' | 'nurse' | 'all';
 export type ActuatorAction = 'up' | 'down' | 'stop' | 'set' | 'toggle' | 'zerog' | 'flat' | 'cardiac' | 'trendelenburg';
@@ -26,17 +27,20 @@ export interface ActuatorCommand {
 
 export interface ESP32ConnectionStatus {
   connected: boolean;
-  transport: 'wifi' | 'ble' | 'both' | 'none';
+  transport: 'wifi' | 'ble' | 'classic-bt' | 'both' | 'none';
   ip: string;
   port: number;
   bleDeviceId?: string;
   bleDeviceName?: string;
+  classicBtAddress?: string;
   lastCommandSent?: string;
   lastCommandTime?: string;
   lastResponseStatus?: string;
   pingMs?: number;
   relaysActive: boolean[]; // 8 relays
 }
+
+const SPP_UUID = '00001101-0000-1000-8000-00805F9B34FB'; // standard Bluetooth SIG Serial Port Profile UUID
 
 // Standard ESP32 BLE GATT Service UUIDs
 export const ESP32_BLE_SERVICES = {
@@ -61,6 +65,7 @@ class ESP32HardwareBridge {
   private webBleDevice: any = null;
   private webBleRxChar: any = null;
   private capacitorBleId: string | null = null;
+  private classicBtAddress: string | null = null;
 
   private status: ESP32ConnectionStatus = {
     connected: false,
@@ -337,6 +342,53 @@ class ESP32HardwareBridge {
   }
 
   /**
+   * Connects via Classic Bluetooth (SPP/RFCOMM) — this is CM41M_BT's actual
+   * transport. Device must already be bonded in Android system Bluetooth
+   * settings; classic BT has no in-app discovery step the way BLE does.
+   */
+  public async connectClassicBluetooth(address: string): Promise<boolean> {
+    try {
+      await BluetoothSerial.connect({ address, uuid: SPP_UUID });
+
+      this.classicBtAddress = address;
+      this.status.classicBtAddress = address;
+      this.status.connected = true;
+      this.status.transport = this.status.transport === 'wifi' ? 'both' : 'classic-bt';
+      this.status.lastResponseStatus = `Classic BT Connected: ${address}`;
+      this.notify();
+
+      try {
+        BluetoothSerial.addListener('onRead', (res: { value: string }) => {
+          this.handleIncomingTelemetry(res.value);
+        });
+      } catch {
+        // Notification stream optional; ignore if plugin version doesn't support it
+      }
+
+      return true;
+    } catch (err: any) {
+      console.warn('[Classic BT Connect Error]', err);
+      this.classicBtAddress = null;
+      throw err;
+    }
+  }
+
+  public async disconnectClassicBluetooth(): Promise<void> {
+    if (!this.classicBtAddress) return;
+    try {
+      await BluetoothSerial.disconnect({ address: this.classicBtAddress });
+    } catch {
+      // Ignore
+    } finally {
+      this.classicBtAddress = null;
+      this.status.classicBtAddress = undefined;
+      this.status.transport = this.status.transport === 'both' ? 'wifi' : 'none';
+      this.status.connected = this.status.transport !== 'none';
+      this.notify();
+    }
+  }
+
+  /**
    * Dispatches Actuator Movement Command across active Wi-Fi and/or BLE links
    * Maps specifically to the 8 relays on the physical board:
    * - R1: Head Up, R2: Head Down
@@ -375,7 +427,16 @@ class ESP32HardwareBridge {
       }
     }
 
-    // 4. Dispatch via Capacitor Native BLE
+    // 4. Dispatch via Classic Bluetooth (SPP) — CM41M_BT's actual transport
+    if (this.classicBtAddress) {
+      try {
+        await BluetoothSerial.write({ value: uartString + '\n' });
+      } catch (err) {
+        console.warn('[Classic BT Write Error]', err);
+      }
+    }
+
+    // 5. Dispatch via Capacitor Native BLE
     if (this.capacitorBleId) {
       try {
         const enc = new TextEncoder().encode(uartString + '\n');
@@ -391,7 +452,7 @@ class ESP32HardwareBridge {
       }
     }
 
-    // 5. Dispatch via HTTP GET/POST with no-cors fallback (for ESP32 REST Server)
+    // 6. Dispatch via HTTP GET/POST with no-cors fallback (for ESP32 REST Server)
     if (this.targetIp) {
       this.dispatchHttpCommand(cmd, uartString);
     }
