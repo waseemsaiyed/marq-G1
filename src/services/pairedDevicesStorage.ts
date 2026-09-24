@@ -1,55 +1,6 @@
 import { PairedDeviceItem } from '../types';
 
-export const DEFAULT_PAIRED_DEVICES: PairedDeviceItem[] = [
-  {
-    id: 'ICU Bed 03',
-    name: 'MarQ Bed ICU-03',
-    mac: 'E4:65:B8:12:F3:9A',
-    fw: 'v2.4.1',
-    signal: '-52 dBm',
-    rssi: -52,
-    battery: '92%',
-    link: 'Dual-Band',
-    recommended: true,
-    room: 'Room 412',
-    patient: 'J. Anderson',
-    ip: '192.168.10.142',
-    isPaired: true,
-    pairedAt: 'Today, 07:45 AM',
-  },
-  {
-    id: 'ESP32-AP-41',
-    name: 'ESP32 Default SoftAP',
-    mac: 'ESP32-AP-192.168.4.1',
-    fw: 'v2.4.1',
-    signal: '-38 dBm (Hotspot)',
-    rssi: -38,
-    battery: '100% (AC Mains)',
-    link: 'Wi-Fi IP',
-    recommended: false,
-    room: 'Direct Hotspot',
-    patient: 'Bed Controller',
-    ip: '192.168.4.1:80',
-    isPaired: true,
-    pairedAt: 'Yesterday, 04:20 PM',
-  },
-  {
-    id: 'Post-Op 12',
-    name: 'MarQ Bed Post-Op 12',
-    mac: 'E4:65:B8:12:21:4C',
-    fw: 'v2.3.9',
-    signal: '-74 dBm',
-    rssi: -74,
-    battery: '78%',
-    link: 'BLE Only',
-    recommended: false,
-    room: 'Room 205',
-    patient: 'M. Vance',
-    ip: '192.168.10.155',
-    isPaired: true,
-    pairedAt: '3 days ago',
-  },
-];
+export const DEFAULT_PAIRED_DEVICES: PairedDeviceItem[] = [];
 
 const STORAGE_KEY = 'marq_paired_devices';
 

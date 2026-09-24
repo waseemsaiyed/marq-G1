@@ -1,0 +1,25 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "User profile with role and subscription status",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "Auth user UID" },
+        "name": { "type": "string", "description": "User's display name" },
+        "email": { "type": "string", "description": "User's email address" },
+        "subscriptionStatus": { "type": "string", "enum": ["pending", "active", "suspended"] },
+        "role": { "type": "string", "enum": ["admin", "clinician"] },
+        "requestedAt": { "type": "string", "format": "date-time" },
+        "approvedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "name", "email", "subscriptionStatus", "role", "requestedAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "UserProfile",
+      "description": "Registry of authorized users and their subscription states"
+    }
+  }
+}

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { BedState, PairedDeviceItem, PatientProfile, StabilityLevel, PatientChartTabKey } from '../types';
+import { BedState, PairedDeviceItem, PatientProfile, StabilityLevel, PatientChartTabKey, UserProfile } from '../types';
 import { PWAInstallButton } from '../components/PWAInstallButton';
 import {
   getPairedDevices,
@@ -24,6 +24,8 @@ import {
   autoDetectAndAdoptAllHardware,
 } from '../services/autoHardwareConnect';
 import { esp32Bridge, ESP32ConnectionStatus } from '../services/esp32HardwareBridge';
+import { logout } from '../services/firebase';
+import { listenToAllUsers, updateUserSubscriptionStatus, updateUserRole } from '../services/subscriptionService';
 
 interface SettingsScreenProps {
   bedState: BedState;
@@ -32,6 +34,8 @@ interface SettingsScreenProps {
   onOpenApkModal?: () => void;
   onNavigateToPair?: () => void;
   onOpenPatientChart?: (tab?: PatientChartTabKey) => void;
+  userProfile?: UserProfile | null;
+  onLogout?: () => void;
 }
 
 export const SettingsScreen: React.FC<SettingsScreenProps> = ({
@@ -41,11 +45,25 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
   onOpenApkModal,
   onNavigateToPair,
   onOpenPatientChart,
+  userProfile,
+  onLogout,
 }) => {
   const [pressHoldDelay, setPressHoldDelay] = useState(true);
   const [exportNotice, setExportNotice] = useState<string | null>(null);
   const [pairedDevices, setPairedDevices] = useState<PairedDeviceItem[]>(() => getPairedDevices());
   const [deviceActionNotice, setDeviceActionNotice] = useState<string | null>(null);
+
+  // Admin subscriber state
+  const [allSubscribers, setAllSubscribers] = useState<UserProfile[]>([]);
+
+  useEffect(() => {
+    if (userProfile?.role === 'admin') {
+      const unsub = listenToAllUsers((list) => {
+        setAllSubscribers(list);
+      });
+      return unsub;
+    }
+  }, [userProfile]);
 
   // Patient Profile & Vitals Editor State
   const [profile, setProfile] = useState<PatientProfile>(() =>
@@ -300,6 +318,180 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
 
   return (
     <div className="flex flex-col w-full gap-4 max-w-lg mx-auto pb-6">
+      {/* Clinician Session Identity */}
+      {userProfile && (
+        <div className="bg-surface-container-lowest rounded-xl p-4 shadow-sm flex flex-col gap-3.5 border border-outline-variant/15">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2.5">
+              <div className="w-10 h-10 rounded-full bg-primary/10 text-primary flex items-center justify-center font-black">
+                {userProfile.name ? userProfile.name.charAt(0).toUpperCase() : 'C'}
+              </div>
+              <div>
+                <div className="text-xs font-black text-on-surface uppercase tracking-tight">
+                  {userProfile.name}
+                </div>
+                <div className="text-[10px] text-on-surface-variant font-mono">
+                  {userProfile.email} • {userProfile.role.toUpperCase()}
+                </div>
+              </div>
+            </div>
+            {onLogout && (
+              <button
+                onClick={onLogout}
+                className="px-2.5 py-1.5 rounded-lg text-[10px] font-extrabold uppercase tracking-wider bg-surface-container hover:bg-surface-variant text-on-surface transition-all cursor-pointer border border-outline-variant/10 active:scale-95 flex items-center gap-1"
+              >
+                <span className="material-symbols-outlined text-[12px]">logout</span>
+                Sign Out
+              </button>
+            )}
+          </div>
+
+          <div className="flex items-center justify-between text-[11px] py-1 border-t border-outline-variant/10 font-mono">
+            <span className="text-on-surface-variant">License Security:</span>
+            <div className="flex items-center gap-1 uppercase font-bold text-emerald-600">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping" />
+              <span>SaaS Subscription Active</span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Admin Subscriber Licensing Registry */}
+      {userProfile?.role === 'admin' && (
+        <div className="bg-surface-container-lowest rounded-xl p-4 shadow-md flex flex-col gap-3.5 border-2 border-primary/25">
+          <div className="flex items-center justify-between pb-1.5 border-b border-outline-variant/10">
+            <div className="flex items-center gap-2">
+              <span className="material-symbols-outlined text-primary text-[22px]">
+                admin_panel_settings
+              </span>
+              <div className="flex flex-col">
+                <h2 className="text-[14px] font-black uppercase text-on-surface tracking-tight">
+                  SaaS Licensing Registry
+                </h2>
+                <span className="text-[9px] font-extrabold text-slate-400 dark:text-outline uppercase tracking-wider font-mono">
+                  Clinical Subscriber Approvals
+                </span>
+              </div>
+            </div>
+            
+            <div className="flex gap-1">
+              <span className="text-[9px] font-bold bg-amber-500/15 text-amber-700 px-1.5 py-0.5 rounded uppercase">
+                {allSubscribers.filter(s => s.subscriptionStatus === 'pending').length} Pending
+              </span>
+              <span className="text-[9px] font-bold bg-emerald-500/15 text-emerald-700 px-1.5 py-0.5 rounded uppercase">
+                {allSubscribers.filter(s => s.subscriptionStatus === 'active').length} Seats
+              </span>
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-2.5 max-h-[280px] overflow-y-auto pr-1">
+            {allSubscribers.length === 0 ? (
+              <div className="text-center py-6 text-xs text-on-surface-variant font-medium">
+                No subscription profiles registered in system yet.
+              </div>
+            ) : (
+              allSubscribers.map((subscriber) => {
+                const isSelf = subscriber.uid === userProfile.uid;
+                return (
+                  <div 
+                    key={subscriber.uid} 
+                    className={`p-3 rounded-lg flex flex-col gap-2 border ${
+                      subscriber.subscriptionStatus === 'pending'
+                        ? 'bg-amber-500/5 border-amber-500/20'
+                        : subscriber.subscriptionStatus === 'suspended'
+                        ? 'bg-rose-500/5 border-rose-500/20'
+                        : 'bg-surface-container-low border-outline-variant/10'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex flex-col">
+                        <span className="text-xs font-bold text-on-surface flex items-center gap-1.5">
+                          {subscriber.name}
+                          {isSelf && (
+                            <span className="text-[8px] font-mono bg-primary/10 text-primary px-1 rounded">
+                              YOU
+                            </span>
+                          )}
+                        </span>
+                        <span className="text-[10px] text-on-surface-variant font-mono truncate max-w-[200px]">
+                          {subscriber.email}
+                        </span>
+                      </div>
+
+                      {/* Status indicator */}
+                      <div className="flex flex-col items-end">
+                        <div className="flex items-center gap-1">
+                          <span className={`w-1.5 h-1.5 rounded-full ${
+                            subscriber.subscriptionStatus === 'active'
+                              ? 'bg-emerald-500'
+                              : subscriber.subscriptionStatus === 'suspended'
+                              ? 'bg-rose-500'
+                              : 'bg-amber-500 animate-pulse'
+                          }`} />
+                          <span className={`text-[9px] font-extrabold uppercase tracking-wider ${
+                            subscriber.subscriptionStatus === 'active'
+                              ? 'text-emerald-700 dark:text-emerald-400'
+                              : subscriber.subscriptionStatus === 'suspended'
+                              ? 'text-rose-700 dark:text-rose-400'
+                              : 'text-amber-700 dark:text-amber-400'
+                          }`}>
+                            {subscriber.subscriptionStatus}
+                          </span>
+                        </div>
+                        <span className="text-[8px] font-mono text-outline uppercase">
+                          {subscriber.role}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Admin Actions */}
+                    {!isSelf && (
+                      <div className="flex items-center justify-between gap-1.5 border-t border-outline-variant/10 pt-2 mt-0.5">
+                        <span className="text-[9px] font-mono text-outline">
+                          ID: {subscriber.uid.substring(0, 8)}...
+                        </span>
+
+                        <div className="flex items-center gap-1">
+                          {/* Approve/Active button */}
+                          {subscriber.subscriptionStatus !== 'active' && (
+                            <button
+                              onClick={() => updateUserSubscriptionStatus(subscriber.uid, 'active')}
+                              className="px-2 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-[9px] font-extrabold uppercase tracking-wide cursor-pointer transition-all active:scale-95 flex items-center gap-0.5"
+                            >
+                              <span className="material-symbols-outlined text-[10px]">check_circle</span>
+                              Approve
+                            </button>
+                          )}
+
+                          {/* Suspend button */}
+                          {subscriber.subscriptionStatus === 'active' && (
+                            <button
+                              onClick={() => updateUserSubscriptionStatus(subscriber.uid, 'suspended')}
+                              className="px-2 py-1 bg-rose-600 hover:bg-rose-700 text-white rounded text-[9px] font-extrabold uppercase tracking-wide cursor-pointer transition-all active:scale-95 flex items-center gap-0.5"
+                            >
+                              <span className="material-symbols-outlined text-[10px]">block</span>
+                              Suspend
+                            </button>
+                          )}
+
+                          {/* Promote/Demote Role button */}
+                          <button
+                            onClick={() => updateUserRole(subscriber.uid, subscriber.role === 'admin' ? 'clinician' : 'admin')}
+                            className="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 dark:bg-surface-container-highest dark:text-on-surface rounded text-[9px] font-extrabold uppercase tracking-wide cursor-pointer transition-all active:scale-95"
+                          >
+                            Set {subscriber.role === 'admin' ? 'Clinician' : 'Admin'}
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </div>
+      )}
+
       {/* ESP32 Hub Diagnostic Header */}
       <div className="bg-surface-container-lowest rounded-xl p-4 shadow-md flex flex-col gap-3 border border-outline-variant/15">
         <div className="flex items-center justify-between">

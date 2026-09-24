@@ -1,0 +1,85 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // 1. Global Catch-all safety net: Default deny all reads and writes
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Standard high-reliability security primitives
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    // Admin detection primitive
+    function isAdmin() {
+      return isSignedIn() && (
+        (request.auth.token.email == "waseemsaiyed@gmail.com" && request.auth.token.email_verified == true) ||
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "admin"
+      );
+    }
+
+    // Entity validation helper to prevent update gaps or shadow field injection
+    function isValidUserProfile(data) {
+      return data.keys().hasAll(['uid', 'name', 'email', 'subscriptionStatus', 'role', 'requestedAt']) &&
+             data.keys().hasOnly(['uid', 'name', 'email', 'subscriptionStatus', 'role', 'requestedAt', 'approvedAt']) &&
+             data.uid is string && data.uid.size() <= 128 &&
+             data.name is string && data.name.size() <= 200 &&
+             data.email is string && data.email.size() <= 256 &&
+             data.subscriptionStatus is string && data.subscriptionStatus in ['pending', 'active', 'suspended'] &&
+             data.role is string && data.role in ['admin', 'clinician'] &&
+             data.requestedAt is string && data.requestedAt.size() <= 64;
+    }
+
+    // 2. User Profiles and Subscription Management matching rules
+    match /users/{userId} {
+      // Document path variable hardening
+      allow get: if isSignedIn() && isValidId(userId) && (request.auth.uid == userId || isAdmin());
+      
+      // Prevent query scraping - only admins can list all subscribers
+      allow list: if isAdmin();
+
+      // Zero-Trust registration with email verification state check
+      allow create: if isSignedIn() && request.auth.uid == userId && isValidId(userId) &&
+                       request.auth.token.email_verified == true &&
+                       isValidUserProfile(incoming()) && 
+                       incoming().email == request.auth.token.email && (
+                         // Bootstrap owner is active and admin immediately
+                         (request.auth.token.email == "waseemsaiyed@gmail.com" && incoming().subscriptionStatus == "active" && incoming().role == "admin") ||
+                         // All other users sign up as pending clinician for approval
+                         (request.auth.token.email != "waseemsaiyed@gmail.com" && incoming().subscriptionStatus == "pending" && incoming().role == "clinician")
+                       );
+
+      // Tiered update permissions
+      allow update: if isSignedIn() && isValidId(userId) && (
+        // Tier 1: System Admin / Owner approving subscription or role change
+        (isAdmin() && isValidUserProfile(incoming()) && incoming().uid == existing().uid && incoming().email == existing().email) ||
+        // Tier 2: Clinician updating only non-mutable profile fields like their name
+        (request.auth.uid == userId && 
+         isValidUserProfile(incoming()) &&
+         incoming().uid == existing().uid &&
+         incoming().email == existing().email &&
+         incoming().role == existing().role &&
+         incoming().subscriptionStatus == existing().subscriptionStatus &&
+         incoming().requestedAt == existing().requestedAt &&
+         incoming().diff(existing()).affectedKeys().hasOnly(['name']))
+      );
+
+      // Deletions strictly restricted to Admins
+      allow delete: if isAdmin() && isValidId(userId);
+    }
+  }
+}

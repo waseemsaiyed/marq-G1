@@ -57,20 +57,20 @@
     --color-inverse-on-surface: #f8fafc;
     --color-outline: #64748b;
     --color-outline-variant: #cbd5e1;
-    --color-surface-tint: #0f62fe;
-    --color-primary: #0f62fe;
+    --color-surface-tint: #2738BA;
+    --color-primary: #2738BA;
     --color-on-primary: #ffffff;
-    --color-primary-container: #0043ce;
+    --color-primary-container: #1b2680;
     --color-on-primary-container: #edf5ff;
-    --color-inverse-primary: #8a3ffc;
-    --color-secondary: #d97706;
+    --color-inverse-primary: #F39019;
+    --color-secondary: #F39019;
     --color-on-secondary: #ffffff;
-    --color-secondary-container: #fb7800;
-    --color-on-secondary-container: #592600;
-    --color-tertiary: #da1e28;
-    --color-on-tertiary: #ffffff;
-    --color-tertiary-container: #fa4d56;
-    --color-on-tertiary-container: #fff1f2;
+    --color-secondary-container: #c47012;
+    --color-on-secondary-container: #fff8ed;
+    --color-tertiary: #FBAE17;
+    --color-on-tertiary: #0f172a;
+    --color-tertiary-container: #fdb927;
+    --color-on-tertiary-container: #3d2400;
     --color-error: #da1e28;
     --color-on-error: #ffffff;
     --color-error-container: #fff1f2;
@@ -186,4 +186,20 @@ input[type="range"]::-webkit-slider-thumb {
 
 input[type="range"]::-webkit-slider-thumb:active {
   transform: scale(1.15);
+}
+
+/* Crystal-clear button press highlight & font visibility */
+button, [role="button"], input[type="button"], input[type="submit"] {
+  transition: all 0.12s ease-in-out;
+}
+
+button:active, [role="button"]:active {
+  transform: scale(0.96) !important;
+  filter: brightness(1.1);
+  box-shadow: 0 0 0 3px rgba(39, 56, 186, 0.45) !important;
+}
+
+button:focus-visible, [role="button"]:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
 }

@@ -193,9 +193,9 @@ export default function App() {
 
       {/* Main Screen Content */}
       <main
-        className={`flex-1 w-full px-4 sm:px-5 ${
+        className={`flex-1 w-full px-4 sm:px-6 md:px-8 ${
           isLowBattery ? 'pt-44' : 'pt-32'
-        } pb-36 max-w-lg mx-auto transition-all duration-200`}
+        } pb-36 max-w-2xl lg:max-w-4xl mx-auto transition-all duration-200`}
       >
         {/* Hardware Auto-Adopted Notification (Wi-Fi or Bluetooth) */}
         {autoAdoptNotice && (

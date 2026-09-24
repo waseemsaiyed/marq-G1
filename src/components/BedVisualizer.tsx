@@ -13,8 +13,8 @@ export const BedVisualizer: React.FC<BedVisualizerProps> = ({
   kneeAngle,
   tiltAngle = 0,
 }) => {
-  // Height vertical translation offset: 40cm = 10px down, 85cm = 12px up
-  const heightOffset = ((overallHeight - 58) / 27) * 12;
+  // Height vertical translation offset: 0cm = 25px down, 85cm = 20px up
+  const heightOffset = ((overallHeight - 42.5) / 42.5) * 20;
 
   // Base platform Y level (default 82)
   const baseY = 82 - heightOffset;
@@ -56,7 +56,7 @@ export const BedVisualizer: React.FC<BedVisualizerProps> = ({
           <span className="text-[9px] sm:text-[10px] font-bold text-on-surface-variant uppercase tracking-wider">
             Head Incline
           </span>
-          <span className="text-[23px] sm:text-[25px] leading-tight text-primary font-extrabold tabular-nums">
+          <span className="text-[18px] sm:text-[20px] leading-tight text-primary font-extrabold tabular-nums">
             {headAngle}°
           </span>
           <span className="text-[8.5px] sm:text-[9px] text-outline font-semibold">0°-90° Limit</span>
@@ -67,7 +67,7 @@ export const BedVisualizer: React.FC<BedVisualizerProps> = ({
             <span className="text-[9px] sm:text-[10px] font-bold text-secondary uppercase tracking-wider">
               {tiltAngle < 0 ? 'Trendelenburg' : 'Rev Trend'}
             </span>
-            <span className="text-[23px] sm:text-[25px] leading-tight text-secondary font-extrabold tabular-nums">
+            <span className="text-[18px] sm:text-[20px] leading-tight text-secondary font-extrabold tabular-nums">
               {Math.abs(tiltAngle)}°
             </span>
             <span className="text-[8.5px] sm:text-[9px] text-secondary font-bold">0°-90° Limit</span>
@@ -77,13 +77,13 @@ export const BedVisualizer: React.FC<BedVisualizerProps> = ({
             <span className="text-[9px] sm:text-[10px] font-bold text-on-surface-variant uppercase tracking-wider">
               Overall Height
             </span>
-            <span className="text-[23px] sm:text-[25px] leading-tight text-secondary font-extrabold tabular-nums">
+            <span className="text-[18px] sm:text-[20px] leading-tight text-primary font-extrabold tabular-nums">
               {overallHeight}{' '}
-              <span className="text-[11px] font-normal text-on-surface-variant">
+              <span className="text-[9.5px] font-normal text-on-surface-variant">
                 cm
               </span>
             </span>
-            <span className="text-[8.5px] sm:text-[9px] text-outline font-semibold">40-85 cm</span>
+            <span className="text-[8.5px] sm:text-[9px] text-outline font-semibold">0-85 cm</span>
           </div>
         )}
 
@@ -91,7 +91,7 @@ export const BedVisualizer: React.FC<BedVisualizerProps> = ({
           <span className="text-[9px] sm:text-[10px] font-bold text-on-surface-variant uppercase tracking-wider">
             Knee Flexion
           </span>
-          <span className="text-[23px] sm:text-[25px] leading-tight text-primary font-extrabold tabular-nums">
+          <span className="text-[18px] sm:text-[20px] leading-tight text-primary font-extrabold tabular-nums">
             {kneeAngle}°
           </span>
           <span className="text-[8.5px] sm:text-[9px] text-outline font-semibold">0°-35° Limit</span>

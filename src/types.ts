@@ -54,7 +54,8 @@ export type PatientChartTabKey =
   | 'diagnostic'
   | 'medication'
   | 'doctor'
-  | 'emergency';
+  | 'emergency'
+  | 'sheets';
 
 export interface VitalsReading {
   id?: string;
