@@ -151,21 +151,20 @@ jobs:
               </p>
             </div>
 
-            {/* Issue 1: Bluetooth */}
+            {/* Issue 1: Bluetooth Classic SPP & BLE */}
             <div className="p-3 rounded-xl bg-surface-container-low border border-outline-variant/20 flex flex-col gap-1.5">
               <div className="flex items-center gap-2">
                 <span className="w-5 h-5 rounded-full bg-primary text-on-primary flex items-center justify-center text-[11px] font-extrabold">
                   1
                 </span>
                 <span className="text-xs font-bold text-on-surface">
-                  Android Bluetooth &amp; Nearby Devices Permission
+                  Bluetooth Classic SPP &amp; BLE Dual Support
                 </span>
               </div>
               <p className="text-[11px] text-on-surface-variant leading-relaxed pl-7">
-                Android 12+ requires granting <strong>&quot;Nearby devices&quot;</strong> permission. On your phone:
-                <br />
-                Go to <em>Android Settings &gt; Apps &gt; MarQ Remote &gt; Permissions &gt; Nearby devices &gt; Allow</em>.
-                Also make sure <strong>Location (GPS)</strong> is turned ON in your phone&apos;s notification shade.
+                The APK now includes a native <strong>Bluetooth Classic SPP Capacitor Plugin</strong> (RFCOMM socket, UUID 0x1101).
+                If paired in your phone&apos;s Bluetooth settings, it connects instantly with zero-lag response!
+                For BLE, ensure <strong>&quot;Nearby devices&quot;</strong> and <strong>Location (GPS)</strong> permissions are granted.
               </p>
             </div>
 

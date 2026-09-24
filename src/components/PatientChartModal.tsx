@@ -26,6 +26,16 @@ import {
   getClinicalVitalsStatus,
 } from '../services/vitalsExportService';
 import { VitalsTrendPageView } from './VitalsTrendPageView';
+import {
+  GOOGLE_APPS_SCRIPT_TEMPLATE,
+  getGoogleSheetUrl,
+  extractGoogleSpreadsheetId,
+  downloadGoogleSheetsCSV,
+  copyForGoogleSheets,
+  syncToGoogleSheetsWebhook,
+  getGlobalGoogleSheetsConfig,
+  saveGlobalGoogleSheetsConfig,
+} from '../utils/googleSheetsSync';
 
 interface PatientChartModalProps {
   isOpen: boolean;
@@ -75,6 +85,25 @@ export const PatientChartModal: React.FC<PatientChartModalProps> = ({
   const [isExportingCsv, setIsExportingCsv] = useState(false);
   const [showExportDropdown, setShowExportDropdown] = useState(false);
 
+  // Google Sheets states
+  const [googleSheetUrlInput, setGoogleSheetUrlInput] = useState(() => {
+    const globalCfg = getGlobalGoogleSheetsConfig();
+    return profile.googleSheetConfig?.spreadsheetId
+      ? getGoogleSheetUrl(profile.googleSheetConfig.spreadsheetId) || ''
+      : globalCfg.spreadsheetId
+      ? getGoogleSheetUrl(globalCfg.spreadsheetId) || ''
+      : '';
+  });
+  const [googleWebhookUrlInput, setGoogleWebhookUrlInput] = useState(() => {
+    return profile.googleSheetConfig?.webhookUrl || getGlobalGoogleSheetsConfig().webhookUrl || '';
+  });
+  const [googleAutoSync, setGoogleAutoSync] = useState(() => {
+    return profile.googleSheetConfig?.autoSyncOnSave !== false;
+  });
+  const [isSyncingToSheet, setIsSyncingToSheet] = useState(false);
+  const [copiedScript, setCopiedScript] = useState(false);
+  const [showAppsScriptModal, setShowAppsScriptModal] = useState(false);
+
   // Reload profile when modal opens or bed switches
   useEffect(() => {
     if (isOpen) {
@@ -88,6 +117,12 @@ export const PatientChartModal: React.FC<PatientChartModalProps> = ({
       }
       setProfile(p);
       setActiveTab(initialTab);
+      if (p.googleSheetConfig?.spreadsheetId) {
+        setGoogleSheetUrlInput(getGoogleSheetUrl(p.googleSheetConfig.spreadsheetId) || '');
+      }
+      if (p.googleSheetConfig?.webhookUrl) {
+        setGoogleWebhookUrlInput(p.googleSheetConfig.webhookUrl);
+      }
     }
   }, [isOpen, bedState.connectedBedId, bedState.patientWeight, bedState.patientName, initialTab]);
 
@@ -214,6 +249,99 @@ export const PatientChartModal: React.FC<PatientChartModalProps> = ({
     setCsvPreviewText(text);
     setShowCsvPreviewModal(true);
     setShowExportDropdown(false);
+  };
+
+  // Google Sheets Action Handlers
+  const handleSaveGoogleSheetConfig = () => {
+    const extractedId = extractGoogleSpreadsheetId(googleSheetUrlInput) || (googleSheetUrlInput.trim().length > 15 ? googleSheetUrlInput.trim() : undefined);
+    const updatedConfig = {
+      webhookUrl: googleWebhookUrlInput.trim(),
+      spreadsheetId: extractedId,
+      sheetName: 'Vitals Stream',
+      autoSyncOnSave: googleAutoSync,
+      lastSyncTime: profile.googleSheetConfig?.lastSyncTime,
+      syncCount: profile.googleSheetConfig?.syncCount || 0,
+    };
+    const updated = {
+      ...profile,
+      googleSheetConfig: updatedConfig,
+    };
+    setProfile(updated);
+    savePatientProfile(updated);
+    saveGlobalGoogleSheetsConfig(updatedConfig);
+    showFeedback('✓ Google Sheet configuration saved & linked!');
+  };
+
+  const handleSyncToGoogleSheetsNow = async () => {
+    const targetUrl = googleWebhookUrlInput.trim() || profile.googleSheetConfig?.webhookUrl;
+    if (!targetUrl) {
+      showFeedback('Please provide a Google Apps Script Webhook URL below.');
+      return;
+    }
+    setIsSyncingToSheet(true);
+    try {
+      const extractedId = extractGoogleSpreadsheetId(googleSheetUrlInput) || profile.googleSheetConfig?.spreadsheetId;
+      const bedTelemetry = {
+        connectedBedId: bedState.connectedBedId,
+        headAngle: bedState.headAngle,
+        kneeAngle: bedState.kneeAngle,
+        bedHeight: bedState.bedHeight,
+        trendelenburgAngle: bedState.trendelenburgAngle,
+        batteryPercent: bedState.batteryPercent,
+        isCharging: bedState.isCharging,
+      };
+      const res = await syncToGoogleSheetsWebhook(
+        targetUrl,
+        profile,
+        profile.auditLogs || [],
+        bedTelemetry,
+        extractedId
+      );
+      if (res.success) {
+        const timeNow = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        const updatedConfig = {
+          ...(profile.googleSheetConfig || { autoSyncOnSave: true }),
+          webhookUrl: targetUrl,
+          spreadsheetId: extractedId,
+          lastSyncTime: timeNow,
+          syncCount: (profile.googleSheetConfig?.syncCount || 0) + 1,
+        };
+        const updated = { ...profile, googleSheetConfig: updatedConfig };
+        setProfile(updated);
+        savePatientProfile(updated);
+        saveGlobalGoogleSheetsConfig(updatedConfig);
+        showFeedback('✓ Telemetry successfully collected into your Google Sheet!');
+      } else {
+        showFeedback(`Sync Error: ${res.message}`);
+      }
+    } catch (err: any) {
+      showFeedback(`Sync Failed: ${err?.message || 'Check network connection'}`);
+    } finally {
+      setIsSyncingToSheet(false);
+    }
+  };
+
+  const handleCopyGoogleSheetsData = async () => {
+    const success = await copyForGoogleSheets(profile);
+    if (success) {
+      showFeedback('✓ Formatted table copied! Paste (Ctrl+V) into Cell A1 of Google Sheet.');
+    } else {
+      showFeedback('Failed to copy table to clipboard');
+    }
+  };
+
+  const handleDownloadGoogleSheetsCsv = () => {
+    downloadGoogleSheetsCSV(profile);
+    showFeedback('✓ Google Sheets CSV downloaded');
+  };
+
+  const handleCopyAppsScriptCode = () => {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(GOOGLE_APPS_SCRIPT_TEMPLATE);
+      setCopiedScript(true);
+      showFeedback('✓ Google Apps Script code copied to clipboard!');
+      setTimeout(() => setCopiedScript(false), 3000);
+    }
   };
 
   // Add new diagnostic report
@@ -413,6 +541,12 @@ export const PatientChartModal: React.FC<PatientChartModalProps> = ({
     { key: 'medication', label: 'Medications', icon: 'medication', badge: profile.medications.length },
     { key: 'doctor', label: 'Doctor Visits', icon: 'clinical_notes', badge: profile.doctorVisits.length },
     { key: 'emergency', label: 'Emergency Notes', icon: 'warning', badge: profile.emergencyNotes.allergies.length ? '!' : undefined },
+    {
+      key: 'sheets',
+      label: 'Google Sheets',
+      icon: 'table_chart',
+      badge: profile.googleSheetConfig?.webhookUrl ? 'Live' : undefined,
+    },
   ];
 
   return (
@@ -2108,6 +2242,297 @@ export const PatientChartModal: React.FC<PatientChartModalProps> = ({
             </div>
           )}
 
+          {/* TAB 8: GOOGLE SHEETS LIVE DATA COLLECTOR & INTEGRATION */}
+          {activeTab === 'sheets' && (
+            <div className="flex flex-col gap-4">
+              {/* Google Sheets Connection Status Card */}
+              <div className="bg-gradient-to-br from-emerald-500/10 via-surface-container-low to-primary/5 p-4 rounded-xl border border-emerald-500/30 flex flex-col gap-3 shadow-xs">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center shadow-xs">
+                      <span className="material-symbols-outlined text-[24px]">table_chart</span>
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h4 className="text-sm font-extrabold text-on-surface">
+                          Google Sheets Telemetry Collector
+                        </h4>
+                        <span className={`text-[9.5px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider ${
+                          profile.googleSheetConfig?.webhookUrl
+                            ? 'bg-emerald-600 text-white shadow-2xs'
+                            : 'bg-amber-100 text-amber-900'
+                        }`}>
+                          {profile.googleSheetConfig?.webhookUrl ? '● LIVE SYNC ACTIVE' : 'SETUP REQUIRED'}
+                        </span>
+                      </div>
+                      <p className="text-xs text-on-surface-variant font-medium">
+                        Collect real-time patient demographics, vitals stream, bed angles, and audit trail directly into Google Sheets.
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Connected Sheet External Link */}
+                  {googleSheetUrlInput && (
+                    <a
+                      href={getGoogleSheetUrl(googleSheetUrlInput) || '#'}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold flex items-center gap-1.5 transition-all shadow-xs"
+                      title="Open connected spreadsheet in new browser tab"
+                    >
+                      <span className="material-symbols-outlined text-[16px]">open_in_new</span>
+                      <span>Open Google Sheet</span>
+                    </a>
+                  )}
+                </div>
+
+                {/* Telemetry Metrics Bar */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2 border-t border-outline-variant/15 text-xs">
+                  <div className="bg-surface-container-lowest/80 p-2 rounded-lg border border-outline-variant/20">
+                    <span className="text-[10px] text-outline block font-bold uppercase">Spreadsheet Link</span>
+                    <span className="font-mono font-bold text-on-surface truncate block text-[11px]">
+                      {extractGoogleSpreadsheetId(googleSheetUrlInput) || (googleSheetUrlInput ? 'Linked' : 'Not linked')}
+                    </span>
+                  </div>
+                  <div className="bg-surface-container-lowest/80 p-2 rounded-lg border border-outline-variant/20">
+                    <span className="text-[10px] text-outline block font-bold uppercase">Live Webhook</span>
+                    <span className="font-bold text-on-surface truncate block text-[11px]">
+                      {googleWebhookUrlInput ? '✓ Apps Script Ready' : 'None configured'}
+                    </span>
+                  </div>
+                  <div className="bg-surface-container-lowest/80 p-2 rounded-lg border border-outline-variant/20">
+                    <span className="text-[10px] text-outline block font-bold uppercase">Last Synced</span>
+                    <span className="font-mono font-bold text-emerald-700 block text-[11px]">
+                      {profile.googleSheetConfig?.lastSyncTime || 'Pending first sync'}
+                    </span>
+                  </div>
+                  <div className="bg-surface-container-lowest/80 p-2 rounded-lg border border-outline-variant/20">
+                    <span className="text-[10px] text-outline block font-bold uppercase">Total Telemetry Posts</span>
+                    <span className="font-bold text-primary block text-[11px]">
+                      {profile.googleSheetConfig?.syncCount || 0} Records
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Action Buttons Row */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                <button
+                  type="button"
+                  onClick={handleSyncToGoogleSheetsNow}
+                  disabled={isSyncingToSheet || !googleWebhookUrlInput}
+                  className={`min-h-[44px] px-3 py-2 rounded-xl text-xs font-extrabold flex items-center justify-center gap-1.5 transition-all shadow-xs cursor-pointer ${
+                    isSyncingToSheet
+                      ? 'bg-emerald-700 text-white animate-pulse'
+                      : googleWebhookUrlInput
+                      ? 'bg-emerald-600 hover:bg-emerald-700 text-white active:scale-98'
+                      : 'bg-surface-container text-outline cursor-not-allowed'
+                  }`}
+                  title="Send immediate telemetry payload to Google Sheets"
+                >
+                  <span className="material-symbols-outlined text-[18px]">
+                    {isSyncingToSheet ? 'hourglass_top' : 'send'}
+                  </span>
+                  <span>{isSyncingToSheet ? 'Sending to Sheet...' : 'Collect & Send Now'}</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleCopyGoogleSheetsData}
+                  className="min-h-[44px] px-3 py-2 rounded-xl bg-surface-container hover:bg-surface-variant text-on-surface text-xs font-bold flex items-center justify-center gap-1.5 border border-outline-variant/30 transition-all cursor-pointer shadow-2xs"
+                  title="Copy Tab-Separated Data to paste directly into Google Sheets Cell A1"
+                >
+                  <span className="material-symbols-outlined text-[18px] text-primary">
+                    content_paste
+                  </span>
+                  <span>Copy for Cell A1</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleDownloadGoogleSheetsCsv}
+                  className="min-h-[44px] px-3 py-2 rounded-xl bg-surface-container hover:bg-surface-variant text-on-surface text-xs font-bold flex items-center justify-center gap-1.5 border border-outline-variant/30 transition-all cursor-pointer shadow-2xs"
+                  title="Download CSV for Google Sheets or Excel"
+                >
+                  <span className="material-symbols-outlined text-[18px] text-emerald-700">
+                    download
+                  </span>
+                  <span>Download .CSV</span>
+                </button>
+              </div>
+
+              {/* Connection Configuration Form */}
+              <div className="bg-surface-container-low rounded-xl p-4 border border-outline-variant/20 flex flex-col gap-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-extrabold text-primary uppercase tracking-wider flex items-center gap-1.5">
+                    <span className="material-symbols-outlined text-[18px]">link</span>
+                    Google Sheets Links &amp; Endpoint Settings
+                  </span>
+                  <a
+                    href="https://sheets.new"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-[11px] font-bold text-primary hover:underline flex items-center gap-1"
+                  >
+                    <span>Create New Sheet (sheets.new)</span>
+                    <span className="material-symbols-outlined text-[14px]">open_in_new</span>
+                  </a>
+                </div>
+
+                <div className="flex flex-col gap-1">
+                  <label className="text-[11px] font-extrabold text-on-surface-variant flex items-center justify-between">
+                    <span>1. Google Spreadsheet Link or Spreadsheet ID</span>
+                    <span className="text-[10px] text-outline font-normal">e.g. https://docs.google.com/spreadsheets/d/.../edit</span>
+                  </label>
+                  <div className="flex items-center gap-1.5">
+                    <input
+                      type="text"
+                      placeholder="https://docs.google.com/spreadsheets/d/1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms/edit"
+                      value={googleSheetUrlInput}
+                      onChange={(e) => setGoogleSheetUrlInput(e.target.value)}
+                      className="flex-1 p-2.5 text-xs rounded-lg border border-outline-variant/30 bg-surface-container-lowest focus:outline-primary font-mono text-on-surface"
+                    />
+                    {googleSheetUrlInput && (
+                      <a
+                        href={getGoogleSheetUrl(googleSheetUrlInput) || '#'}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="px-2.5 py-2 rounded-lg bg-surface-container hover:bg-surface-variant text-primary text-xs font-bold shrink-0 flex items-center gap-1 border border-outline-variant/30"
+                        title="Open this Google Sheet"
+                      >
+                        <span className="material-symbols-outlined text-[16px]">open_in_new</span>
+                        <span>Open</span>
+                      </a>
+                    )}
+                  </div>
+                </div>
+
+                <div className="flex flex-col gap-1">
+                  <label className="text-[11px] font-extrabold text-on-surface-variant flex items-center justify-between">
+                    <span>2. Google Apps Script Webhook URL (for automated collection)</span>
+                    <span className="text-[10px] text-outline font-normal">Ends with /exec</span>
+                  </label>
+                  <input
+                    type="url"
+                    placeholder="https://script.google.com/macros/s/AKfycb.../exec"
+                    value={googleWebhookUrlInput}
+                    onChange={(e) => setGoogleWebhookUrlInput(e.target.value)}
+                    className="w-full p-2.5 text-xs rounded-lg border border-outline-variant/30 bg-surface-container-lowest focus:outline-primary font-mono text-on-surface"
+                  />
+                </div>
+
+                <div className="flex items-center justify-between pt-1">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={googleAutoSync}
+                      onChange={(e) => setGoogleAutoSync(e.target.checked)}
+                      className="w-4 h-4 rounded text-primary focus:ring-primary cursor-pointer"
+                    />
+                    <span className="text-xs font-bold text-on-surface">
+                      Auto-sync to Google Sheet whenever patient data or vitals are updated
+                    </span>
+                  </label>
+
+                  <button
+                    type="button"
+                    onClick={handleSaveGoogleSheetConfig}
+                    className="px-4 py-2 rounded-lg bg-primary hover:bg-primary-hover text-on-primary text-xs font-bold transition-all shadow-xs cursor-pointer active:scale-98"
+                  >
+                    Save &amp; Link
+                  </button>
+                </div>
+              </div>
+
+              {/* Data Collected Summary */}
+              <div className="bg-surface-container-low rounded-xl p-4 border border-outline-variant/20 flex flex-col gap-2.5">
+                <div className="flex items-center justify-between">
+                  <h5 className="text-xs font-extrabold text-on-surface uppercase tracking-wider flex items-center gap-1.5">
+                    <span className="material-symbols-outlined text-[18px] text-emerald-600">dataset</span>
+                    Automated Google Sheets Tabs Generated
+                  </h5>
+                  <button
+                    type="button"
+                    onClick={() => setShowAppsScriptModal(true)}
+                    className="text-[11px] font-bold text-primary hover:underline flex items-center gap-1 cursor-pointer"
+                  >
+                    <span className="material-symbols-outlined text-[14px]">code</span>
+                    <span>View Apps Script Code</span>
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                  <div className="p-2.5 bg-surface-container-lowest rounded-lg border border-outline-variant/15 flex flex-col gap-1">
+                    <div className="flex items-center justify-between">
+                      <span className="font-extrabold text-emerald-800">📄 Vitals Stream</span>
+                      <span className="text-[10px] font-bold bg-emerald-100 text-emerald-900 px-1.5 py-0.2 rounded">Append Row</span>
+                    </div>
+                    <span className="text-[11px] text-on-surface-variant">
+                      Appends every reading with Timestamp, Bed ID, Patient Name, MRN, HR, BP Sys/Dia, SpO2, Resp, Temp, Pain, Weight, Stability, and Notes.
+                    </span>
+                  </div>
+
+                  <div className="p-2.5 bg-surface-container-lowest rounded-lg border border-outline-variant/15 flex flex-col gap-1">
+                    <div className="flex items-center justify-between">
+                      <span className="font-extrabold text-primary">📄 Patient Overview</span>
+                      <span className="text-[10px] font-bold bg-primary/10 text-primary px-1.5 py-0.2 rounded">Live Key-Value</span>
+                    </div>
+                    <span className="text-[11px] text-on-surface-variant">
+                      Maintains an up-to-date summary dashboard with demographics, blood type, stability, diagnostics count, and active medications.
+                    </span>
+                  </div>
+
+                  <div className="p-2.5 bg-surface-container-lowest rounded-lg border border-outline-variant/15 flex flex-col gap-1">
+                    <div className="flex items-center justify-between">
+                      <span className="font-extrabold text-blue-700">📄 Bed Actuators</span>
+                      <span className="text-[10px] font-bold bg-blue-100 text-blue-900 px-1.5 py-0.2 rounded">Telemetry</span>
+                    </div>
+                    <span className="text-[11px] text-on-surface-variant">
+                      Records articulation angles (Head, Knee, Trendelenburg), elevation height, and battery/AC power state.
+                    </span>
+                  </div>
+
+                  <div className="p-2.5 bg-surface-container-lowest rounded-lg border border-outline-variant/15 flex flex-col gap-1">
+                    <div className="flex items-center justify-between">
+                      <span className="font-extrabold text-amber-800">📄 Audit Trail</span>
+                      <span className="text-[10px] font-bold bg-amber-100 text-amber-900 px-1.5 py-0.2 rounded">Compliance</span>
+                    </div>
+                    <span className="text-[11px] text-on-surface-variant">
+                      Appends full timestamped audit entries of all data edits, field updates, tare calibrations, and nurse signatures.
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* 60-Second Setup Guide */}
+              <div className="bg-surface-container-low rounded-xl p-4 border border-outline-variant/20 flex flex-col gap-2.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-extrabold text-on-surface flex items-center gap-1.5">
+                    <span className="material-symbols-outlined text-[18px] text-primary">help</span>
+                    How to Connect Your Google Sheet in 60 Seconds
+                  </span>
+                  <button
+                    type="button"
+                    onClick={handleCopyAppsScriptCode}
+                    className="px-2.5 py-1 rounded bg-primary text-on-primary text-[11px] font-bold flex items-center gap-1 cursor-pointer transition-all hover:bg-primary-hover active:scale-95"
+                  >
+                    <span className="material-symbols-outlined text-[14px]">content_copy</span>
+                    <span>{copiedScript ? 'Copied!' : 'Copy Script Code'}</span>
+                  </button>
+                </div>
+
+                <ol className="text-xs text-on-surface-variant space-y-1.5 list-decimal list-inside leading-relaxed">
+                  <li>Open your Google Sheet (or click <a href="https://sheets.new" target="_blank" rel="noopener noreferrer" className="text-primary font-bold underline">sheets.new</a> to create one).</li>
+                  <li>In the top menu, go to <strong>Extensions &gt; Apps Script</strong>.</li>
+                  <li>Replace the code in <code>Code.gs</code> with our ready-to-use collector script (click &quot;Copy Script Code&quot; above) and click <strong>Save</strong>.</li>
+                  <li>In the top right, click <strong>Deploy &gt; New deployment</strong>.</li>
+                  <li>Select type: <strong>Web app</strong>, set &quot;Execute as: Me&quot;, and &quot;Who has access: Anyone&quot;.</li>
+                  <li>Click <strong>Deploy</strong>, copy the Web app URL (ends with <code>/exec</code>), and paste it into field #2 above!</li>
+                </ol>
+              </div>
+            </div>
+          )}
+
         </div>
 
         {/* Modal Footer */}
@@ -2207,6 +2632,64 @@ export const PatientChartModal: React.FC<PatientChartModalProps> = ({
                     <span>Download CSV</span>
                   </button>
                 </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Google Apps Script Collector Code Modal */}
+        {showAppsScriptModal && (
+          <div className="fixed inset-0 z-60 flex items-center justify-center p-3 sm:p-5 bg-black/75 backdrop-blur-md animate-in fade-in duration-200">
+            <div className="bg-surface-container-lowest w-full max-w-xl max-h-[85vh] rounded-2xl shadow-2xl flex flex-col border border-outline-variant/30 overflow-hidden">
+              {/* Apps Script Header */}
+              <div className="px-5 py-4 border-b border-outline-variant/20 flex items-center justify-between bg-surface-container-low/80">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-9 h-9 rounded-xl bg-emerald-600/15 text-emerald-700 flex items-center justify-center">
+                    <span className="material-symbols-outlined text-[20px]">code</span>
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-extrabold text-on-surface">
+                      Google Apps Script Telemetry Collector (Code.gs)
+                    </h4>
+                    <span className="text-[11px] font-mono text-outline">
+                      Extensions &gt; Apps Script &gt; Code.gs
+                    </span>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setShowAppsScriptModal(false)}
+                  className="w-8 h-8 rounded-full bg-surface-container hover:bg-surface-variant text-on-surface-variant flex items-center justify-center cursor-pointer transition-colors"
+                  aria-label="Close"
+                >
+                  <span className="material-symbols-outlined text-[18px]">close</span>
+                </button>
+              </div>
+
+              {/* Instructions Banner */}
+              <div className="px-5 py-2.5 bg-emerald-500/10 border-b border-emerald-500/20 text-xs text-emerald-900 leading-relaxed font-medium">
+                Paste this script into your Google Sheet to receive automatic real-time rows for <strong>Vitals Stream</strong>, <strong>Patient Overview</strong>, <strong>Bed Actuators</strong>, and <strong>Audit Trail</strong>.
+              </div>
+
+              {/* Code Pre Box */}
+              <div className="flex-1 p-4 overflow-auto bg-neutral-950 text-emerald-400 font-mono text-[11px] leading-relaxed select-all max-h-[50vh]">
+                <pre className="whitespace-pre overflow-x-auto">{GOOGLE_APPS_SCRIPT_TEMPLATE}</pre>
+              </div>
+
+              {/* Actions Footer */}
+              <div className="px-5 py-3.5 border-t border-outline-variant/20 bg-surface-container-low flex items-center justify-between gap-2">
+                <button
+                  onClick={() => setShowAppsScriptModal(false)}
+                  className="px-3 py-1.5 rounded-lg text-xs font-bold text-outline hover:text-on-surface hover:bg-surface-container cursor-pointer transition-colors"
+                >
+                  Close
+                </button>
+                <button
+                  onClick={handleCopyAppsScriptCode}
+                  className="px-4 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-xs transition-all active:scale-95"
+                >
+                  <span className="material-symbols-outlined text-[16px]">content_copy</span>
+                  <span>{copiedScript ? 'Copied to Clipboard!' : 'Copy Entire Script'}</span>
+                </button>
               </div>
             </div>
           </div>

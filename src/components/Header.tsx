@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { BedState, PairedDeviceItem, PatientChartTabKey } from '../types';
 import { MarqLogo } from './MarqLogo';
 import { getPairedDevices, removePairedDevice } from '../services/pairedDevicesStorage';
+import { esp32Bridge, ESP32ConnectionStatus } from '../services/esp32HardwareBridge';
 
 interface HeaderProps {
   bedState: BedState;
@@ -26,6 +27,7 @@ export const Header: React.FC<HeaderProps> = ({
 }) => {
   const [showBedMenu, setShowBedMenu] = useState(false);
   const [pairedBeds, setPairedBeds] = useState<PairedDeviceItem[]>(() => getPairedDevices());
+  const [bridgeStatus, setBridgeStatus] = useState<ESP32ConnectionStatus>(() => esp32Bridge.getStatus());
 
   useEffect(() => {
     const handleStorageChange = (e: any) => {
@@ -36,13 +38,18 @@ export const Header: React.FC<HeaderProps> = ({
       }
     };
     window.addEventListener('marq_paired_devices_changed', handleStorageChange);
+
+    const unsub = esp32Bridge.subscribe((s) => {
+      setBridgeStatus(s);
+    });
+
     return () => {
       window.removeEventListener('marq_paired_devices_changed', handleStorageChange);
+      unsub();
     };
   }, []);
 
-  const isLowBattery =
-    bedState.batteryPercent < (bedState.lowBatteryThreshold ?? 20);
+  const isLowBattery = bedState.batteryPercent < (bedState.lowBatteryThreshold ?? 20);
 
   const handleRemoveItem = (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -54,44 +61,48 @@ export const Header: React.FC<HeaderProps> = ({
   };
 
   return (
-    <header className="fixed top-0 left-0 right-0 w-full z-[100] pt-safe bg-surface-container-lowest border-b border-outline-variant/15 shadow-sm transition-all duration-200">
-      <div className="px-3 sm:px-5 flex flex-col gap-1.5 sm:gap-2 py-1.5 sm:py-2 max-w-lg mx-auto">
-        {/* Top Action Row */}
+    <header className="fixed top-0 left-0 right-0 w-full z-[100] pt-safe bg-white border-b border-slate-200/60 shadow-xs transition-all duration-200">
+      <div className="px-4 sm:px-5 flex flex-col gap-2 py-2.5 max-w-lg mx-auto">
+        {/* Top Action Row (Strict Top Bar Contract styling) */}
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-1.5 sm:gap-2">
-            <div className="flex items-center gap-1.5" title="MARQ W-1 Smart Hospital Bed Controls">
-              <MarqLogo height={24} className="text-on-surface hover:opacity-95 transition-opacity" />
+          <div className="flex items-center gap-2">
+            {/* Wordmark brand zone */}
+            <div className="flex items-center" title="MARQ W-1 Smart Bed Console">
+              <MarqLogo height={20} className="text-slate-900 hover:opacity-85 transition-opacity" />
             </div>
-            <span className="text-outline-variant text-[13px] sm:text-[14px]">/</span>
+            
+            <span className="text-slate-300 text-sm font-light">·</span>
+            
+            {/* Elegant Paired Selector Dropdown */}
             <div className="relative">
               <button
                 id="bed-selector-btn"
                 onClick={() => setShowBedMenu(!showBedMenu)}
-                className="flex items-center gap-1 px-2 sm:px-2.5 py-0.5 sm:py-1 rounded-full bg-surface-container hover:bg-surface-variant transition-colors min-h-[28px] sm:min-h-[32px] cursor-pointer"
+                className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-50 hover:bg-slate-100/80 border border-slate-200/50 transition-colors min-h-[30px] cursor-pointer"
               >
                 {bedState.wifiConnected && (
-                  <span className="material-symbols-outlined text-[14px] text-primary" title="Wi-Fi Connected">
+                  <span className="material-symbols-outlined text-[13px] text-primary" title="Wi-Fi Active">
                     wifi
                   </span>
                 )}
                 {bedState.bleSynced && (
-                  <span className="material-symbols-outlined text-[14px] text-primary" title="Bluetooth Linked">
+                  <span className="material-symbols-outlined text-[13px] text-primary" title="Bluetooth Active">
                     bluetooth_connected
                   </span>
                 )}
-                <span className="text-[10px] sm:text-[11px] font-bold text-on-surface uppercase tracking-wider">
-                  {bedState.connectedBedId || 'No Bed Paired'}
+                <span className="text-[10px] font-bold text-slate-800 uppercase tracking-wider font-mono">
+                  {bedState.connectedBedId || 'No Bed'}
                 </span>
-                <span className="material-symbols-outlined text-on-surface-variant text-[15px] sm:text-[16px]">
+                <span className="material-symbols-outlined text-slate-500 text-[14px]">
                   expand_more
                 </span>
               </button>
 
               {showBedMenu && (
-                <div className="absolute left-0 mt-1.5 w-64 bg-surface-container-lowest rounded-xl shadow-xl border border-outline-variant/30 py-1.5 z-50 animate-in fade-in zoom-in-95 duration-150">
-                  <div className="flex items-center justify-between px-3 py-1">
-                    <span className="text-[10px] font-bold text-outline uppercase tracking-wider">
-                      Paired Beds ({pairedBeds.length})
+                <div className="absolute left-0 mt-2 w-64 bg-white rounded-xl shadow-lg border border-slate-200/80 py-1.5 z-50 animate-in fade-in zoom-in-95 duration-100">
+                  <div className="flex items-center justify-between px-3 py-1 text-slate-400">
+                    <span className="text-[9px] font-bold uppercase tracking-wider">
+                      Paired Devices ({pairedBeds.length})
                     </span>
                     {onNavigateToPair && (
                       <button
@@ -99,7 +110,7 @@ export const Header: React.FC<HeaderProps> = ({
                           setShowBedMenu(false);
                           onNavigateToPair();
                         }}
-                        className="text-[10px] font-extrabold text-primary hover:underline cursor-pointer"
+                        className="text-[10px] font-bold text-primary hover:underline cursor-pointer"
                       >
                         Manage
                       </button>
@@ -107,9 +118,9 @@ export const Header: React.FC<HeaderProps> = ({
                   </div>
 
                   {pairedBeds.length === 0 ? (
-                    <div className="px-3 py-3 text-center flex flex-col items-center gap-1.5">
-                      <span className="text-xs text-on-surface-variant">
-                        No paired controllers
+                    <div className="px-3 py-4 text-center flex flex-col items-center gap-2">
+                      <span className="text-xs text-slate-500">
+                        No paired bed controllers
                       </span>
                       {onNavigateToPair && (
                         <button
@@ -117,12 +128,12 @@ export const Header: React.FC<HeaderProps> = ({
                             setShowBedMenu(false);
                             onNavigateToPair();
                           }}
-                          className="px-2.5 py-1 rounded-md bg-primary text-on-primary text-[11px] font-bold flex items-center gap-1 cursor-pointer"
+                          className="px-3 py-1.5 rounded-lg bg-primary text-white text-[11px] font-bold flex items-center gap-1 cursor-pointer"
                         >
                           <span className="material-symbols-outlined text-[14px]">
                             add_link
                           </span>
-                          Pair New Bed
+                          Pair Bed
                         </button>
                       )}
                     </div>
@@ -134,47 +145,41 @@ export const Header: React.FC<HeaderProps> = ({
                           onSwitchBed(bed.id, bed.room, bed.patient);
                           setShowBedMenu(false);
                         }}
-                        className={`w-full text-left px-3 py-2 text-xs flex items-center justify-between hover:bg-surface-container-low transition-colors cursor-pointer ${
+                        className={`w-full text-left px-3 py-2 text-xs flex items-center justify-between hover:bg-slate-50 transition-colors cursor-pointer ${
                           bedState.connectedBedId === bed.id
-                            ? 'text-primary font-bold bg-primary/5'
-                            : 'text-on-surface'
+                            ? 'text-primary font-bold bg-slate-50/80'
+                            : 'text-slate-800'
                         }`}
                       >
                         <div className="min-w-0 flex-1 pr-2">
                           <div className="font-semibold truncate flex items-center gap-1">
-                            <span>{bed.name || bed.id}</span>
+                            <span className="font-mono">{bed.name || bed.id}</span>
                             {bedState.connectedBedId === bed.id && (
-                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-600" />
+                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
                             )}
                           </div>
-                          <div className="text-[10px] text-on-surface-variant truncate">
-                            {bed.patient} • {bed.room} • {bed.link}
+                          <div className="text-[10px] text-slate-500 truncate">
+                            {bed.patient} · {bed.room}
                           </div>
                         </div>
 
                         <div className="flex items-center gap-1 shrink-0">
                           <button
                             onClick={(e) => handleRemoveItem(bed.id, e)}
-                            className="p-1 rounded text-outline-variant hover:text-tertiary hover:bg-tertiary/10 transition-colors"
+                            className="p-1 rounded text-slate-300 hover:text-red-500 hover:bg-red-50 transition-colors"
                             title={`Forget ${bed.name || bed.id}`}
-                            aria-label={`Forget ${bed.name || bed.id}`}
                           >
-                            <span className="material-symbols-outlined text-[16px]">
+                            <span className="material-symbols-outlined text-[15px]">
                               delete_outline
                             </span>
                           </button>
-                          {bedState.connectedBedId === bed.id && (
-                            <span className="material-symbols-outlined text-primary text-[16px]">
-                              check
-                            </span>
-                          )}
                         </div>
                       </div>
                     ))
                   )}
 
                   {onOpenPatientChart && (
-                    <div className="mt-1 pt-1 border-t border-outline-variant/15 px-2">
+                    <div className="mt-1 pt-1 border-t border-slate-100 px-2">
                       <button
                         onClick={() => {
                           setShowBedMenu(false);
@@ -182,27 +187,10 @@ export const Header: React.FC<HeaderProps> = ({
                         }}
                         className="w-full text-left px-2 py-1.5 rounded-lg text-[11px] font-bold text-primary hover:bg-primary/5 flex items-center gap-1.5 cursor-pointer"
                       >
-                        <span className="material-symbols-outlined text-[16px]">
+                        <span className="material-symbols-outlined text-[15px]">
                           badge
                         </span>
-                        <span>Patient Chart, Vitals &amp; Mass</span>
-                      </button>
-                    </div>
-                  )}
-
-                  {onNavigateToPair && (
-                    <div className="pt-1 px-2">
-                      <button
-                        onClick={() => {
-                          setShowBedMenu(false);
-                          onNavigateToPair();
-                        }}
-                        className="w-full text-left px-2 py-1.5 rounded-lg text-[11px] font-bold text-on-surface-variant hover:bg-surface-container flex items-center gap-1.5 cursor-pointer"
-                      >
-                        <span className="material-symbols-outlined text-[16px]">
-                          add_circle
-                        </span>
-                        <span>Pair New Bluetooth or Wi-Fi</span>
+                        <span>View Patient Chart</span>
                       </button>
                     </div>
                   )}
@@ -211,86 +199,77 @@ export const Header: React.FC<HeaderProps> = ({
             </div>
           </div>
 
-          <div className="flex items-center gap-1.5 sm:gap-2">
+          <div className="flex items-center gap-2">
             {onOpenPatientChart && (
               <button
                 id="header-patient-btn"
                 onClick={() => onOpenPatientChart('mass')}
-                className="h-[30px] sm:h-8 px-1.5 sm:px-2.5 rounded-lg bg-surface-container hover:bg-surface-variant text-on-surface flex items-center gap-1.5 text-[10px] sm:text-[11px] font-bold border border-outline-variant/30 shadow-2xs active:scale-95 transition-all cursor-pointer"
-                title="Open Editable Patient Profile, Vitals & Mass Chart"
+                className="h-[32px] px-2.5 rounded-lg bg-slate-50 hover:bg-slate-100 text-slate-800 flex items-center gap-1.5 text-[11px] font-bold border border-slate-200/60 transition-all cursor-pointer"
+                title="Edit Patient Chart"
               >
-                <span className="material-symbols-outlined text-[15px] sm:text-[16px] text-primary">
+                <span className="material-symbols-outlined text-[15px] text-primary">
                   clinical_notes
                 </span>
-                <span className="hidden sm:inline max-w-[110px] truncate">
-                  👤 {bedState.patientName || 'Unassigned'} (Edit Profile)
+                <span className="max-w-[100px] truncate">
+                  {bedState.patientName || 'Unassigned'}
                 </span>
-                <span className="sm:hidden">Edit Profile</span>
-              </button>
-            )}
-
-            {onOpenApkModal && (
-              <button
-                onClick={onOpenApkModal}
-                className="h-[30px] sm:h-8 px-2 sm:px-2.5 rounded-lg bg-surface-container hover:bg-surface-variant text-primary flex items-center gap-1 text-[10px] sm:text-[11px] font-bold border border-primary/20 shadow-2xs active:scale-95 transition-all cursor-pointer"
-                title="Android App & APK Info"
-              >
-                <span className="material-symbols-outlined text-[15px] sm:text-[16px]">
-                  android
-                </span>
-                <span>APK</span>
               </button>
             )}
 
             <button
               id="header-e-stop-btn"
               onClick={onTriggerEStop}
-              className="h-[34px] sm:h-9 px-2.5 sm:px-3 rounded-full bg-tertiary hover:bg-tertiary-container text-on-tertiary flex items-center gap-1 sm:gap-1.5 shadow-[0_2px_8px_rgba(159,0,15,0.25)] active:scale-95 transition-transform cursor-pointer"
+              className="h-[32px] px-3.5 rounded-full bg-red-600 hover:bg-red-700 text-white flex items-center gap-1 shadow-xs transition-colors cursor-pointer"
               title="Emergency Stop"
             >
-              <span className="material-symbols-outlined text-[16px] sm:text-[18px]">
+              <span className="material-symbols-outlined text-[15px] fill-current">
                 pan_tool
               </span>
-              <span className="text-[10px] sm:text-[11px] font-extrabold uppercase tracking-wider">
+              <span className="text-[10px] font-extrabold uppercase tracking-wider">
                 E-STOP
               </span>
             </button>
           </div>
         </div>
 
-        {/* Telemetry Status Bar */}
-        <div className="flex items-center justify-between bg-surface-container-low/90 px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-xl border border-outline-variant/20">
-          <div className="flex items-center gap-3">
+        {/* Telemetry Status Bar - Highly calibrated unboxed data labels */}
+        <div className="flex items-center justify-between bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-200/50">
+          <div className="flex items-center gap-3 text-[10px] font-semibold text-slate-500 font-mono">
+            {bridgeStatus.hybridActive && (
+              <div className="flex items-center gap-1 text-emerald-700">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                <span>HYBRID DUAL-LINK</span>
+              </div>
+            )}
+
+            {/* Bluetooth Channel */}
             <div className="flex items-center gap-1.5">
-              <span className="w-2 h-2 rounded-full bg-emerald-500 ring-2 ring-emerald-100 animate-pulse"></span>
-              <span className="material-symbols-outlined text-on-surface-variant text-[16px]">
-                bluetooth
-              </span>
-              <span className="text-[11px] font-semibold text-on-surface-variant">
-                BLE 5.0
+              <span className={`w-1.5 h-1.5 rounded-full ${bridgeStatus.bluetoothConnected ? 'bg-emerald-500' : 'bg-slate-300'}`} />
+              <span className="uppercase tracking-tight">
+                {bridgeStatus.bluetoothType === 'classic' ? 'BT Classic SPP' : 'BLE Link'}
               </span>
             </div>
-            <span className="text-outline-variant text-[10px]">•</span>
+
+            <span className="text-slate-300">·</span>
+
+            {/* Wi-Fi Channel */}
             <div className="flex items-center gap-1.5">
-              <span className="w-2 h-2 rounded-full bg-primary ring-2 ring-primary-fixed"></span>
-              <span className="material-symbols-outlined text-on-surface-variant text-[16px]">
-                wifi
-              </span>
-              <span className="text-[11px] font-semibold text-on-surface-variant">
-                Hospital_WLAN
+              <span className={`w-1.5 h-1.5 rounded-full ${bridgeStatus.wifiConnected ? 'bg-primary' : 'bg-slate-300'}`} />
+              <span className="uppercase tracking-tight">
+                {bridgeStatus.wifiConnected ? `${bridgeStatus.ip}` : 'Wi-Fi Stdby'}
               </span>
             </div>
           </div>
 
           <div
-            className={`flex items-center gap-1.5 px-2 py-0.5 rounded-md shadow-xs transition-colors ${
+            className={`flex items-center gap-1.5 px-2 py-0.5 rounded-md transition-colors ${
               isLowBattery
-                ? 'bg-amber-500/20 text-amber-700 ring-1 ring-amber-500/40'
-                : 'bg-surface-container-lowest text-on-surface'
+                ? 'bg-amber-500/10 text-amber-700 border border-amber-500/20'
+                : 'bg-white text-slate-800 border border-slate-100'
             }`}
           >
             <span
-              className={`material-symbols-outlined text-[16px] ${
+              className={`material-symbols-outlined text-[15px] ${
                 isLowBattery ? 'text-amber-600 animate-pulse' : 'text-emerald-600'
               }`}
             >
@@ -300,45 +279,34 @@ export const Header: React.FC<HeaderProps> = ({
                 ? 'battery_charging_full'
                 : 'battery_full'}
             </span>
-            <span
-              className={`text-[11px] font-bold ${
-                isLowBattery ? 'text-amber-800' : 'text-on-surface'
-              }`}
-            >
+            <span className="text-[10px] font-bold font-mono tabular-nums leading-none">
               {bedState.batteryPercent}%
             </span>
             {bedState.isCharging && (
-              <span className="material-symbols-outlined text-amber-500 text-[14px]">
+              <span className="material-symbols-outlined text-amber-500 text-[12px] leading-none">
                 bolt
               </span>
             )}
           </div>
         </div>
 
-        {/* Low Battery Warning Threshold Alert Banner */}
+        {/* Low Battery Warning Banner */}
         {isLowBattery && (
           <div
             id="header-low-battery-alert"
             role="alert"
-            className="bg-amber-500/15 border border-amber-500/40 text-on-surface rounded-xl px-3 py-2 flex items-center justify-between shadow-xs animate-in fade-in slide-in-from-top-1 duration-200"
+            className="bg-amber-500/5 border border-amber-500/30 text-slate-800 rounded-xl px-3 py-2 flex items-center justify-between shadow-xs animate-in slide-in-from-top-1"
           >
             <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-lg bg-amber-500/20 text-amber-600 flex items-center justify-center shrink-0">
-                <span className="material-symbols-outlined text-[20px] animate-pulse">
-                  battery_alert
+              <span className="material-symbols-outlined text-amber-600 text-[18px] shrink-0 animate-pulse">
+                battery_alert
+              </span>
+              <div className="flex flex-col text-left">
+                <span className="text-[11px] font-bold text-amber-800 leading-tight">
+                  AC Mains Disconnected · Low Charge Warning
                 </span>
-              </div>
-              <div className="flex flex-col">
-                <div className="flex items-center gap-1.5">
-                  <span className="text-[12px] font-extrabold text-amber-800 tracking-tight">
-                    Low Battery Warning ({bedState.batteryPercent}%)
-                  </span>
-                  <span className="text-[9px] font-extrabold px-1.5 py-0.2 rounded bg-amber-500/25 text-amber-900 uppercase">
-                    Threshold &lt; {bedState.lowBatteryThreshold ?? 20}%
-                  </span>
-                </div>
-                <span className="text-[10px] text-on-surface-variant font-medium leading-tight">
-                  Connect AC mains power to ensure uninterrupted motorized actuation.
+                <span className="text-[9px] text-slate-500 leading-none mt-0.5">
+                  Remaining battery capacity below {bedState.lowBatteryThreshold}% threshold.
                 </span>
               </div>
             </div>
@@ -347,17 +315,9 @@ export const Header: React.FC<HeaderProps> = ({
               <button
                 id="btn-toggle-charging-header"
                 onClick={onToggleCharging}
-                className={`ml-2 shrink-0 px-2.5 py-1 rounded-lg text-[10px] font-bold flex items-center gap-1 transition-all cursor-pointer shadow-2xs ${
-                  bedState.isCharging
-                    ? 'bg-emerald-600 text-white hover:bg-emerald-700'
-                    : 'bg-amber-600 text-white hover:bg-amber-700 active:scale-95'
-                }`}
-                title="Toggle AC Power Input"
+                className="shrink-0 px-2 py-1 rounded bg-amber-600 hover:bg-amber-700 text-white text-[9.5px] font-bold tracking-wide uppercase transition-all shadow-2xs"
               >
-                <span className="material-symbols-outlined text-[14px]">
-                  {bedState.isCharging ? 'power' : 'power_off'}
-                </span>
-                <span>{bedState.isCharging ? 'AC Active' : 'Connect AC'}</span>
+                Simulate AC Link
               </button>
             )}
           </div>

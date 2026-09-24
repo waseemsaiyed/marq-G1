@@ -103,7 +103,21 @@ export default function App() {
     hapticFeedback: 'strong',
     voiceEnabled: true,
     highContrast: false,
+    darkMode: typeof window !== 'undefined'
+      ? localStorage.getItem('marq_dark_mode') === 'true' || window.matchMedia('(prefers-color-scheme: dark)').matches
+      : false,
   });
+
+  // Apply dark mode theme to document element
+  useEffect(() => {
+    if (bedState.darkMode) {
+      document.documentElement.classList.add('dark');
+      localStorage.setItem('marq_dark_mode', 'true');
+    } else {
+      document.documentElement.classList.remove('dark');
+      localStorage.setItem('marq_dark_mode', 'false');
+    }
+  }, [bedState.darkMode]);
 
   const handleTriggerEStop = () => {
     setBedState((prev) => ({ ...prev, eStopTriggered: true }));

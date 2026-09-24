@@ -40,6 +40,7 @@ export interface BedState {
   hapticFeedback: 'subtle' | 'strong';
   voiceEnabled: boolean;
   highContrast: boolean;
+  darkMode: boolean;
   patientStability?: StabilityLevel;
 }
 

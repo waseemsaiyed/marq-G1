@@ -349,277 +349,250 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
   return (
     <div className="flex flex-col w-full gap-4 max-w-lg mx-auto pb-6">
       {/* Top Patient & Bed Live Status Card */}
-      <div className="bg-surface-container-lowest rounded-xl p-4 shadow-md flex flex-col gap-3 relative overflow-hidden border border-outline-variant/15">
+      <div className="bg-white rounded-xl p-4 shadow-xs flex flex-col gap-3 relative overflow-hidden border border-slate-200/60">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center text-primary">
-              <span className="material-symbols-outlined text-[24px]">
+            <div className="w-10 h-10 rounded-lg bg-blue-50 text-primary flex items-center justify-center">
+              <span className="material-symbols-outlined text-[22px]">
                 airline_seat_flat
               </span>
             </div>
             <div className="flex flex-col">
-              <div className="flex items-center gap-1.5 flex-wrap">
-                <span className="text-[17px] font-bold text-on-surface">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-[15px] font-bold text-slate-900 font-mono">
                   {bedState.connectedBedId || 'Bed Controller'}
                 </span>
-                <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-extrabold uppercase">
-                  Active
-                </span>
-                <span
-                  className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-extrabold uppercase ${
+                
+                {/* Zero-Pill unboxed statuses with typography separators */}
+                <div className="flex items-center gap-1.5 text-[10px] font-bold tracking-wider uppercase">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                  <span className="text-emerald-700">Active</span>
+                </div>
+                
+                <span className="text-slate-300">·</span>
+
+                <div className="flex items-center gap-1.5 text-[10px] font-bold tracking-wider uppercase">
+                  <span className={`w-1.5 h-1.5 rounded-full ${
                     patientProfile.stability === 'Stable'
-                      ? 'bg-emerald-100 text-emerald-800'
+                      ? 'bg-emerald-500'
                       : patientProfile.stability === 'Critical'
-                      ? 'bg-red-100 text-red-800'
-                      : 'bg-amber-100 text-amber-800'
-                  }`}
-                >
-                  {patientProfile.stability}
-                </span>
+                      ? 'bg-rose-500'
+                      : 'bg-amber-500'
+                  }`} />
+                  <span className={
+                    patientProfile.stability === 'Stable'
+                      ? 'text-emerald-700'
+                      : patientProfile.stability === 'Critical'
+                      ? 'text-rose-700 animate-pulse'
+                      : 'text-amber-700'
+                  }>
+                    {patientProfile.stability}
+                  </span>
+                </div>
               </div>
-              <div className="flex items-center gap-1.5 text-xs text-on-surface-variant font-medium mt-0.5">
-                <span className="font-bold text-on-surface">{patientProfile.name || bedState.patientName}</span>
-                <span>•</span>
-                <span>{bedState.roomNumber}</span>
-                <span>•</span>
+              <div className="flex items-center gap-1 text-xs text-slate-500 font-medium mt-0.5">
+                <span className="font-bold text-slate-800">{patientProfile.name || bedState.patientName}</span>
+                <span>·</span>
+                <span className="font-mono">{bedState.roomNumber}</span>
+                <span>·</span>
                 <span>{patientProfile.age}y / {patientProfile.sex}</span>
               </div>
             </div>
           </div>
 
-          <div className="flex flex-col items-end">
-            <div className="flex items-center gap-1 bg-surface-container px-2 py-1 rounded-lg">
-              <span className="material-symbols-outlined text-[16px] text-emerald-600">
+          <div className="flex flex-col items-end text-right">
+            <div className="flex items-center gap-1 bg-slate-50 px-2 py-0.5 rounded-lg border border-slate-100">
+              <span className="material-symbols-outlined text-[13px] text-emerald-500">
                 bolt
               </span>
-              <span className="text-[11px] text-on-surface font-extrabold">
+              <span className="text-[10px] font-bold font-mono text-slate-800">
                 {bedState.batteryPercent}%
               </span>
             </div>
-            <span className="text-[10px] text-outline font-semibold mt-1">
-              Plugged &amp; Charging
+            <span className="text-[9px] text-slate-400 font-medium mt-0.5 uppercase tracking-wider">
+              AC Charging
             </span>
           </div>
         </div>
 
-        {/* Patient Vitals & Mass Live Clinical Snapshot */}
-        <div className="bg-surface-container-low/70 rounded-xl p-2.5 border border-outline-variant/15 flex flex-col gap-2">
+        {/* Patient Vitals & Mass Live Clinical Snapshot - No nesting boxes, clean flat list with vertical dividers */}
+        <div className="bg-slate-50/50 rounded-xl p-3 border border-slate-200/50 flex flex-col gap-2.5">
           <div className="flex items-center justify-between text-xs">
-            <div className="flex items-center gap-1 text-on-surface font-bold">
-              <span className="material-symbols-outlined text-primary text-[16px]">
+            <div className="flex items-center gap-1.5 text-slate-800 font-bold">
+              <span className="material-symbols-outlined text-primary text-[15px]">
                 vital_signs
               </span>
-              <span>Patient Vitals &amp; Mass</span>
+              <span>Telemetry Snapshot</span>
             </div>
             {onOpenPatientChart && (
               <button
                 id="btn-edit-patient-chart"
                 onClick={() => onOpenPatientChart('mass')}
-                className="text-[11px] font-extrabold text-primary hover:underline flex items-center gap-0.5 cursor-pointer"
+                className="text-[10px] font-bold text-primary hover:underline flex items-center gap-0.5 cursor-pointer uppercase tracking-wider"
               >
                 <span>Edit Chart</span>
-                <span className="material-symbols-outlined text-[14px]">chevron_right</span>
+                <span className="material-symbols-outlined text-[12px]">chevron_right</span>
               </button>
             )}
           </div>
 
-          {/* Quick Metrics Bar */}
-          <div className="grid grid-cols-4 gap-1.5 text-center">
+          {/* Clean vertical grid with dividers, no box cards */}
+          <div className="grid grid-cols-4 divide-x divide-slate-200/70 text-center py-1 bg-white/70 rounded-lg border border-slate-200/30">
             <div
               onClick={() => onOpenPatientChart && onOpenPatientChart('mass')}
-              className="bg-surface-container-lowest p-1.5 rounded-lg border border-outline-variant/20 hover:border-primary/40 transition-colors cursor-pointer"
-              title="Click to view/edit mass & stability"
+              className="flex flex-col items-center justify-center cursor-pointer px-0.5"
             >
-              <div className="text-[9px] font-bold text-outline uppercase">Mass</div>
-              <div className="text-xs font-black text-primary">
-                {bedState.patientWeight || patientProfile.massKg} kg
-              </div>
+              <span className="text-[8px] font-bold text-slate-400 uppercase tracking-wider">Mass</span>
+              <span className="text-xs sm:text-[13px] font-black text-primary font-mono tabular-nums leading-tight">
+                {bedState.patientWeight || patientProfile.massKg} <span className="text-[9px] font-normal text-slate-400">kg</span>
+              </span>
             </div>
 
             <div
               onClick={() => onOpenPatientChart && onOpenPatientChart('vitals')}
-              className="bg-surface-container-lowest p-1.5 rounded-lg border border-outline-variant/20 hover:border-primary/40 transition-colors cursor-pointer"
-              title="Click to view/edit vitals"
+              className="flex flex-col items-center justify-center cursor-pointer px-0.5"
             >
-              <div className="text-[9px] font-bold text-outline uppercase">Heart Rate</div>
-              <div className="text-xs font-black text-tertiary">
-                {patientProfile.vitals.heartRate} bpm
-              </div>
+              <span className="text-[8px] font-bold text-slate-400 uppercase tracking-wider">HR</span>
+              <span className="text-xs sm:text-[13px] font-black text-rose-600 font-mono tabular-nums leading-tight">
+                {patientProfile.vitals.heartRate} <span className="text-[9px] font-normal text-slate-400">bpm</span>
+              </span>
             </div>
 
             <div
               onClick={() => onOpenPatientChart && onOpenPatientChart('vitals')}
-              className="bg-surface-container-lowest p-1.5 rounded-lg border border-outline-variant/20 hover:border-primary/40 transition-colors cursor-pointer"
-              title="Click to view/edit blood pressure"
+              className="flex flex-col items-center justify-center cursor-pointer px-0.5"
             >
-              <div className="text-[9px] font-bold text-outline uppercase">BP</div>
-              <div className="text-xs font-black text-indigo-700">
+              <span className="text-[8px] font-bold text-slate-400 uppercase tracking-wider">BP</span>
+              <span className="text-xs sm:text-[13px] font-black text-indigo-600 font-mono tabular-nums leading-tight">
                 {patientProfile.vitals.bloodPressureSys}/{patientProfile.vitals.bloodPressureDia}
-              </div>
+              </span>
             </div>
 
             <div
               onClick={() => onOpenPatientChart && onOpenPatientChart('vitals')}
-              className="bg-surface-container-lowest p-1.5 rounded-lg border border-outline-variant/20 hover:border-primary/40 transition-colors cursor-pointer"
-              title="Click to view/edit SpO2"
+              className="flex flex-col items-center justify-center cursor-pointer px-0.5"
             >
-              <div className="text-[9px] font-bold text-outline uppercase">SpO2</div>
-              <div className="text-xs font-black text-sky-700">
+              <span className="text-[8px] font-bold text-slate-400 uppercase tracking-wider">SpO2</span>
+              <span className="text-xs sm:text-[13px] font-black text-sky-600 font-mono tabular-nums leading-tight">
                 {patientProfile.vitals.spO2}%
-              </div>
+              </span>
             </div>
           </div>
 
-          {/* Quick Clinical Navigation Pills */}
+          {/* Quick Clinical Navigation - Segmented clean tab-style layout */}
           {onOpenPatientChart && (
             <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none pt-1">
               <button
                 onClick={() => onOpenPatientChart('mass')}
-                className="px-2 py-1 rounded-md bg-surface-container hover:bg-surface-variant text-[10px] font-bold text-on-surface whitespace-nowrap flex items-center gap-1 cursor-pointer transition-colors"
+                className="px-2.5 py-1 rounded bg-slate-100 hover:bg-slate-200 text-[10px] font-bold text-slate-700 whitespace-nowrap flex items-center gap-1 cursor-pointer transition-colors"
               >
-                <span className="material-symbols-outlined text-[13px] text-primary">scale</span>
                 <span>Mass &amp; Stability</span>
               </button>
 
               <button
                 onClick={() => onOpenPatientChart('vitals')}
-                className="px-2 py-1 rounded-md bg-surface-container hover:bg-surface-variant text-[10px] font-bold text-on-surface whitespace-nowrap flex items-center gap-1 cursor-pointer transition-colors"
+                className="px-2.5 py-1 rounded bg-slate-100 hover:bg-slate-200 text-[10px] font-bold text-slate-700 whitespace-nowrap flex items-center gap-1 cursor-pointer transition-colors"
               >
-                <span className="material-symbols-outlined text-[13px] text-tertiary">ecg_heart</span>
                 <span>Vitals</span>
               </button>
 
               <button
                 onClick={() => onOpenPatientChart('trends')}
-                className="px-2 py-1 rounded-md bg-primary/10 hover:bg-primary/20 text-[10px] font-bold text-primary whitespace-nowrap flex items-center gap-1 cursor-pointer transition-colors"
-                title="View arrow trend indicators and comparative deltas"
+                className="px-2.5 py-1 rounded bg-blue-50 hover:bg-blue-100 text-[10px] font-bold text-primary whitespace-nowrap flex items-center gap-1 cursor-pointer transition-colors"
               >
-                <span className="material-symbols-outlined text-[13px]">trending_up</span>
                 <span>Trends</span>
               </button>
 
               <button
                 onClick={() => onOpenPatientChart('diagnostic')}
-                className="px-2 py-1 rounded-md bg-surface-container hover:bg-surface-variant text-[10px] font-bold text-on-surface whitespace-nowrap flex items-center gap-1 cursor-pointer transition-colors"
+                className="px-2.5 py-1 rounded bg-slate-100 hover:bg-slate-200 text-[10px] font-bold text-slate-700 whitespace-nowrap flex items-center gap-1 cursor-pointer transition-colors"
               >
-                <span className="material-symbols-outlined text-[13px] text-teal-700">biomedical</span>
                 <span>Reports ({patientProfile.diagnosticReports.length})</span>
-              </button>
-
-              <button
-                onClick={() => onOpenPatientChart('medication')}
-                className="px-2 py-1 rounded-md bg-surface-container hover:bg-surface-variant text-[10px] font-bold text-on-surface whitespace-nowrap flex items-center gap-1 cursor-pointer transition-colors"
-              >
-                <span className="material-symbols-outlined text-[13px] text-emerald-700">medication</span>
-                <span>Meds ({patientProfile.medications.length})</span>
-              </button>
-
-              <button
-                onClick={() => onOpenPatientChart('doctor')}
-                className="px-2 py-1 rounded-md bg-surface-container hover:bg-surface-variant text-[10px] font-bold text-on-surface whitespace-nowrap flex items-center gap-1 cursor-pointer transition-colors"
-              >
-                <span className="material-symbols-outlined text-[13px] text-primary">clinical_notes</span>
-                <span>Doctor Visits</span>
-              </button>
-
-              <button
-                onClick={() => onOpenPatientChart('emergency')}
-                className="px-2 py-1 rounded-md bg-red-50 hover:bg-red-100 text-[10px] font-bold text-red-800 whitespace-nowrap flex items-center gap-1 cursor-pointer transition-colors"
-              >
-                <span className="material-symbols-outlined text-[13px] text-red-700">e911_emergency</span>
-                <span>Emergency Notes</span>
               </button>
             </div>
           )}
         </div>
 
-        <div className="flex items-center justify-between pt-1 border-t border-outline-variant/10 bg-surface-container-low px-3 py-1.5 rounded-lg">
-          <div className="flex items-center gap-1.5">
-            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-            <span className="text-[11px] text-on-surface font-bold">
-              BLE 5.0 Synced
-            </span>
-            <span className="text-[11px] text-outline">· 2ms jitter</span>
+        <div className="flex items-center justify-between pt-1 text-[10px] text-slate-400 font-medium">
+          <div className="flex items-center gap-1">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+            <span className="font-mono">BLE 5.0 Synchronized</span>
           </div>
-          <div className="flex items-center gap-1 text-primary">
-            <span className="material-symbols-outlined text-[14px]">
+          <div className="flex items-center gap-0.5 text-primary">
+            <span className="material-symbols-outlined text-[12px]">
               shield
             </span>
-            <span className="text-[11px] font-bold">
-              Guard Actuators Active
-            </span>
+            <span className="font-bold">Guardian Active</span>
           </div>
         </div>
       </div>
 
-      {/* Direct Clinical Telemetry & Broadcaster Card (Email & WhatsApp) */}
-      <div className="bg-surface-container-lowest rounded-xl p-4 shadow-md border border-outline-variant/15 flex flex-col gap-3.5 relative overflow-hidden">
+      {/* Direct Clinical Telemetry & Broadcaster Card */}
+      <div className="bg-white rounded-xl p-4 shadow-xs border border-slate-200/60 flex flex-col gap-3 relative overflow-hidden">
         {/* Card Header */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-emerald-500/10 text-emerald-700 flex items-center justify-center">
-              <span className="material-symbols-outlined text-[20px]">share</span>
+            <div className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center">
+              <span className="material-symbols-outlined text-[18px]">share</span>
             </div>
             <div>
-              <h4 className="text-sm font-extrabold text-on-surface">
-                MARQ W-1 Clinical Telemetry Broadcast
+              <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wide">
+                Bedside Telemetry Broadcaster
               </h4>
-              <p className="text-[10px] text-outline font-semibold">
-                Direct WhatsApp &amp; Email Doctor/Family Updates
+              <p className="text-[9.5px] text-slate-400 font-semibold leading-none mt-0.5">
+                Instant WhatsApp &amp; Email updates to Physician/Family
               </p>
             </div>
           </div>
-          <span className="text-[9px] font-extrabold uppercase px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-800 tracking-wider">
-            Broadcaster v1.2
+          <span className="text-[8.5px] font-bold text-slate-400 uppercase tracking-wider">
+            Broadcast v1.2
           </span>
         </div>
 
-        {/* 2-Hour Share Countdown Tracker */}
-        <div className="bg-surface-container/60 rounded-xl p-3 border border-outline-variant/10 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        {/* 2-Hour Share Countdown Tracker - Sleek flat section, no box boxes */}
+        <div className="bg-slate-50/50 rounded-xl p-3 border border-slate-200/40 flex items-center justify-between">
           <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-full bg-primary/10 text-primary flex items-center justify-center shrink-0">
-              <span className={`material-symbols-outlined text-[20px] ${enable2HrReminder ? 'animate-spin' : ''}`} style={{ animationDuration: '6s' }}>
-                schedule
-              </span>
-            </div>
+            <span className={`material-symbols-outlined text-primary text-[18px] ${enable2HrReminder ? 'animate-spin' : ''}`} style={{ animationDuration: '10s' }}>
+              schedule
+            </span>
             <div>
               <div className="flex items-center gap-1.5">
-                <span className="text-xs font-bold text-on-surface">
-                  2-Hour Broadcast Scheduler
+                <span className="text-xs font-bold text-slate-800">
+                  Scheduler Interval
                 </span>
-                <span className={`text-[8.5px] font-extrabold px-1 py-0.2 rounded uppercase ${enable2HrReminder ? 'bg-emerald-500/15 text-emerald-800' : 'bg-outline-variant/20 text-outline'}`}>
-                  {enable2HrReminder ? 'ACTIVE' : 'MUTED'}
+                <span className={`text-[8px] font-extrabold px-1 rounded ${enable2HrReminder ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-200/60 text-slate-500'}`}>
+                  {enable2HrReminder ? 'Active' : 'Muted'}
                 </span>
               </div>
-              <p className="text-[10px] text-on-surface-variant font-medium leading-tight">
-                Recommended clinical frequency of update broadcasts.
+              <p className="text-[10px] text-slate-400 font-medium">
+                Standard clinical synchronization frequency.
               </p>
             </div>
           </div>
 
-          <div className="flex flex-col items-end shrink-0">
-            <div className="text-[13px] font-black font-mono text-primary tabular-nums">
+          <div className="flex flex-col items-end text-right">
+            <div className="text-xs font-bold font-mono text-primary tabular-nums tracking-wide">
               {enable2HrReminder ? formatTime(secondsLeft) : '--:--:--'}
             </div>
-            <span className="text-[9px] text-outline font-semibold">
-              Next schedule alert
+            <span className="text-[9px] text-slate-400 font-semibold uppercase tracking-wider">
+              Countdown
             </span>
           </div>
         </div>
 
         {/* Broadcast Reminder Alert Pop-up */}
         {showBroadcastReminderAlert && (
-          <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-3 flex flex-col gap-2 animate-in slide-in-from-top-1 duration-200">
+          <div className="bg-amber-500/5 border border-amber-500/30 rounded-xl p-3 flex flex-col gap-2.5 animate-in slide-in-from-top-1">
             <div className="flex items-start gap-2">
-              <span className="material-symbols-outlined text-amber-600 text-[20px] shrink-0 animate-pulse mt-0.5">
+              <span className="material-symbols-outlined text-amber-600 text-[18px] shrink-0 animate-pulse mt-0.5">
                 notifications_active
               </span>
-              <div className="flex-1">
-                <span className="text-xs font-black text-amber-800 leading-none">
-                  2-Hour Interval Elapsed
+              <div className="flex-1 text-left">
+                <span className="text-xs font-bold text-amber-800">
+                  Interval Elapsed (2-Hour Clock)
                 </span>
-                <p className="text-[10px] text-on-surface-variant font-medium mt-0.5 leading-tight">
-                  Please broadcast the current vitals, medications and clinical reports log immediately to ensure continuous clinical alignment.
+                <p className="text-[10px] text-slate-500 font-medium mt-0.5 leading-tight">
+                  Patient vitals and clinical report update cycle has elapsed. Please broadcast current stats.
                 </p>
               </div>
             </div>
@@ -629,48 +602,47 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
                   setSecondsLeft(reminderInterval);
                   setShowBroadcastReminderAlert(false);
                 }}
-                className="px-2.5 py-1 text-[10px] font-bold text-on-surface-variant hover:bg-surface-container rounded-md cursor-pointer transition-colors"
+                className="px-2.5 py-1 text-[9.5px] font-bold text-slate-400 hover:text-slate-600 rounded cursor-pointer transition-colors"
               >
-                Mute Alert
+                Dismiss Alert
               </button>
               <button
                 onClick={() => {
                   triggerWhatsApp();
                 }}
-                className="px-3 py-1 bg-amber-600 text-white text-[10px] font-black rounded-md flex items-center gap-1 cursor-pointer hover:bg-amber-700 active:scale-95 transition-all shadow-2xs"
+                className="px-3 py-1 bg-amber-600 hover:bg-amber-700 text-white text-[9.5px] font-bold rounded flex items-center gap-1 cursor-pointer transition-all shadow-2xs"
               >
-                <span className="material-symbols-outlined text-[13px]">share</span>
-                <span>Send WhatsApp Now</span>
+                <span>Broadcast WhatsApp</span>
               </button>
             </div>
           </div>
         )}
 
         {/* Share Recipient Details Form */}
-        <div className="flex flex-col gap-2 bg-surface-container/20 p-2.5 rounded-xl border border-outline-variant/5">
+        <div className="flex flex-col gap-2.5 bg-slate-50/20 p-2.5 rounded-xl border border-slate-200/40">
           <div className="flex items-center justify-between">
-            <span className="text-[10px] font-black uppercase tracking-wider text-on-surface-variant">
+            <span className="text-[9px] font-extrabold uppercase tracking-wider text-slate-400">
               Recipient Contact
             </span>
-            <div className="flex bg-surface-container rounded-lg p-0.5 border border-outline-variant/10">
+            <div className="flex bg-slate-100 rounded-lg p-0.5 border border-slate-200/50">
               <button
                 type="button"
                 onClick={() => setRecipientType('doctor')}
-                className={`px-2 py-0.5 text-[9.5px] font-extrabold rounded-md cursor-pointer transition-all ${
+                className={`px-2 py-0.5 text-[9px] font-extrabold rounded-md cursor-pointer transition-all ${
                   recipientType === 'doctor'
-                    ? 'bg-primary text-on-primary shadow-2xs'
-                    : 'text-on-surface-variant hover:bg-surface-variant/40'
+                    ? 'bg-primary text-white'
+                    : 'text-slate-500 hover:bg-slate-200/50'
                 }`}
               >
-                🩺 Doctor
+                🩺 Attending
               </button>
               <button
                 type="button"
                 onClick={() => setRecipientType('family')}
-                className={`px-2 py-0.5 text-[9.5px] font-extrabold rounded-md cursor-pointer transition-all ${
+                className={`px-2 py-0.5 text-[9px] font-extrabold rounded-md cursor-pointer transition-all ${
                   recipientType === 'family'
-                    ? 'bg-primary text-on-primary shadow-2xs'
-                    : 'text-on-surface-variant hover:bg-surface-variant/40'
+                    ? 'bg-primary text-white'
+                    : 'text-slate-500 hover:bg-slate-200/50'
                 }`}
               >
                 🏠 Family
@@ -680,83 +652,73 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
 
           <div className="grid grid-cols-2 gap-2">
             <div className="flex flex-col gap-1">
-              <label className="text-[9.5px] font-bold text-on-surface-variant flex items-center gap-1">
-                <span className="material-symbols-outlined text-[13px] text-emerald-600">call</span>
-                <span>{recipientType === 'doctor' ? 'Doctor Phone' : 'Family Phone'}</span>
-              </label>
+              <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Phone</span>
               <input
                 type="text"
                 value={sharePhone}
                 onChange={(e) => setSharePhone(e.target.value)}
-                placeholder="Phone (e.g. +15553829912)"
-                className="p-2 text-xs rounded-lg border border-outline-variant/40 bg-surface-container/30 focus:outline-primary font-bold text-on-surface"
+                placeholder="e.g. +15553829912"
+                className="p-1.5 text-xs rounded-lg border border-slate-200 bg-white focus:outline-primary font-mono font-bold text-slate-800"
               />
             </div>
 
             <div className="flex flex-col gap-1">
-              <label className="text-[9.5px] font-bold text-on-surface-variant flex items-center gap-1">
-                <span className="material-symbols-outlined text-[13px] text-primary">mail</span>
-                <span>{recipientType === 'doctor' ? 'Doctor Email' : 'Family Email'}</span>
-              </label>
+              <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Email</span>
               <input
                 type="email"
                 value={shareEmail}
                 onChange={(e) => setShareEmail(e.target.value)}
-                placeholder="Email address"
-                className="p-2 text-xs rounded-lg border border-outline-variant/40 bg-surface-container/30 focus:outline-primary font-bold text-on-surface"
+                placeholder="Email Address"
+                className="p-1.5 text-xs rounded-lg border border-slate-200 bg-white focus:outline-primary font-bold text-slate-800"
               />
             </div>
           </div>
 
-          <div className="text-[10px] text-outline leading-none font-semibold">
+          <div className="text-[9.5px] text-slate-400 leading-none">
             {recipientType === 'doctor' ? (
-              <span>Currently sending to: <strong className="text-on-surface-variant">{contacts.doctorName}</strong> (Attending Physician)</span>
+              <span>Currently sending to: <strong className="text-slate-600 font-bold">{contacts.doctorName}</strong> (Physician)</span>
             ) : (
-              <span>Currently sending to: <strong className="text-on-surface-variant">{contacts.familyContactName}</strong> ({contacts.familyContactRelation})</span>
+              <span>Currently sending to: <strong className="text-slate-600 font-bold">{contacts.familyContactName}</strong> ({contacts.familyContactRelation})</span>
             )}
           </div>
         </div>
 
         {/* Share Action Buttons */}
-        <div className="grid grid-cols-2 gap-2.5">
+        <div className="grid grid-cols-2 gap-2">
           {/* WhatsApp Button */}
           <button
             onClick={triggerWhatsApp}
-            className="h-[44px] rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white flex items-center justify-center gap-1.5 shadow-[0_4px_12px_rgba(16,185,129,0.2)] transition-all cursor-pointer font-bold text-xs"
+            className="h-[38px] rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white flex items-center justify-center gap-1.5 transition-all cursor-pointer font-bold text-xs shadow-2xs"
           >
-            <svg className="w-5 h-5 fill-white shrink-0" viewBox="0 0 24 24">
-              <path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946C.06 5.348 5.397.01 12.008.01c3.202.001 6.212 1.246 8.477 3.514 2.266 2.268 3.507 5.28 3.505 8.484-.004 6.657-5.34 11.997-11.953 11.997-2.005-.001-3.973-.502-5.717-1.455L0 24zm6.59-4.846c1.6.95 3.188 1.449 4.825 1.451 5.436 0 9.86-4.37 9.864-9.742.002-2.602-1.005-5.05-2.834-6.88C16.671 2.152 14.225.992 11.64.992 6.208.992 1.782 5.362 1.778 10.733c-.001 1.639.453 3.21 1.312 4.6l-.993 3.629 3.73-.974h.22z" />
-            </svg>
+            <span className="material-symbols-outlined text-[16px]">chat</span>
             <span>Broadcast WhatsApp</span>
           </button>
 
           {/* Email Button */}
           <button
             onClick={triggerEmail}
-            className="h-[44px] rounded-xl bg-primary hover:bg-primary-container active:scale-95 text-white flex items-center justify-center gap-1.5 shadow-[0_4px_12px_rgba(0,79,140,0.2)] transition-all cursor-pointer font-bold text-xs"
+            className="h-[38px] rounded-xl bg-primary hover:bg-primary-container active:scale-95 text-white flex items-center justify-center gap-1.5 transition-all cursor-pointer font-bold text-xs shadow-2xs"
           >
-            <span className="material-symbols-outlined text-[20px]">
-              mail
-            </span>
+            <span className="material-symbols-outlined text-[16px]">mail</span>
             <span>Broadcast Email</span>
           </button>
         </div>
 
         {/* Scheduler Controls Footer */}
-        <div className="flex items-center justify-between pt-1.5 border-t border-outline-variant/10 text-[11px] gap-1 flex-wrap">
-          <div className="flex items-center gap-1 text-on-surface-variant font-medium flex-wrap">
-            <span className="font-bold">Timer Controls:</span>
+        <div className="flex items-center justify-between pt-2 border-t border-slate-200/50 text-[10px] gap-2 flex-wrap">
+          <div className="flex items-center gap-1 text-slate-500 font-medium">
+            <span className="font-bold">Scheduler Actions:</span>
             <button
               type="button"
               onClick={() => {
                 setEnable2HrReminder(!enable2HrReminder);
                 setSecondsLeft(reminderInterval);
               }}
-              className="px-1.5 py-0.5 rounded bg-surface-container hover:bg-surface-variant text-[10px] font-black uppercase text-primary transition-colors cursor-pointer"
+              className="text-primary hover:underline px-1 py-0.5 hover:bg-slate-50 rounded"
             >
-              {enable2HrReminder ? 'Pause Timer' : 'Resume Timer'}
+              {enable2HrReminder ? 'Pause' : 'Resume'}
             </button>
-            <span className="text-outline">|</span>
+            <span className="text-slate-300">|</span>
             <button
               type="button"
               onClick={() => {
@@ -765,11 +727,11 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
                 setEnable2HrReminder(true);
                 setShowBroadcastReminderAlert(false);
               }}
-              className="text-primary font-bold hover:underline"
+              className="text-primary hover:underline px-1 py-0.5 hover:bg-slate-50 rounded"
             >
-              Reset to 2hr
+              Reset 2h
             </button>
-            <span className="text-outline">|</span>
+            <span className="text-slate-300">|</span>
             <button
               type="button"
               onClick={() => {
@@ -778,15 +740,15 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
                 setEnable2HrReminder(true);
                 setShowBroadcastReminderAlert(false);
               }}
-              className="text-tertiary font-bold hover:underline"
-              title="Set to 15 seconds for testing the reminder pop-up alert."
+              className="text-amber-700 hover:underline px-1 py-0.5 hover:bg-slate-50 rounded"
+              title="Test the countdown in 15 seconds"
             >
               Test (15s)
             </button>
           </div>
 
-          <div className="text-outline font-semibold">
-            Last sent: <span className="font-bold text-on-surface">{lastBroadcastTime}</span>
+          <div className="text-slate-400 font-semibold font-mono">
+            Sent: <span className="text-slate-700 font-bold">{lastBroadcastTime}</span>
           </div>
         </div>
       </div>
@@ -794,22 +756,22 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
       {/* Voice Prompt Bar */}
       <button
         onClick={handleVoiceDemo}
-        className="w-full bg-primary/5 hover:bg-primary/10 transition-colors rounded-xl px-4 py-2 flex items-center justify-between shadow-xs border border-primary/15 text-left cursor-pointer"
+        className="w-full bg-slate-50 hover:bg-slate-100/80 transition-colors rounded-xl px-4 py-2.5 flex items-center justify-between border border-slate-200/50 text-left cursor-pointer"
       >
-        <div className="flex items-center gap-2.5">
-          <span className="flex h-7 w-7 items-center justify-center rounded-full bg-primary text-on-primary shadow-xs">
-            <span className="material-symbols-outlined text-[16px]">mic</span>
+        <div className="flex items-center gap-2">
+          <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary text-white shadow-2xs">
+            <span className="material-symbols-outlined text-[13px]">mic</span>
           </span>
-          <span className="text-xs sm:text-[13px] font-medium text-primary">
-            {voiceSpoken ? '“Command executed: Head inclined to 30°”' : '“Hey MarQ, elevate head 30°”'}
+          <span className="text-xs font-semibold text-slate-700">
+            {voiceSpoken ? '“Command: Head inclined to 30°”' : '“Hey MarQ, elevate head 30°”'}
           </span>
         </div>
-        <span className="text-[10px] font-bold bg-surface-container-lowest px-2 py-1 rounded text-on-surface-variant uppercase shadow-xs">
-          {voiceSpoken ? 'Active' : 'Voice Ready'}
+        <span className="text-[9px] font-bold bg-white px-2 py-0.5 rounded border border-slate-200 text-slate-400 uppercase shadow-2xs">
+          {voiceSpoken ? 'Listening' : 'Voice Ready'}
         </span>
       </button>
 
-      {/* Interactive 3D Medical Bed Silhouette Canvas */}
+      {/* Interactive Medical Bed Silhouette Canvas */}
       <BedVisualizer
         headAngle={bedState.headAngle}
         overallHeight={bedState.overallHeight}
@@ -817,23 +779,25 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
         tiltAngle={bedState.tiltAngle}
       />
 
-      {/* Section 1: Head & Knee Actuation Tiles */}
+      {/* Section 1: Actuator Control Tiles (Premium technical controller layout) */}
       <div className="flex flex-col gap-1.5">
-        <span className="text-[11px] font-extrabold text-outline uppercase tracking-wider px-1">
-          Primary Articulations
+        <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-widest px-1">
+          Bed Actuation Consoles
         </span>
-        <div className="grid grid-cols-2 gap-2.5">
+        <div className="grid grid-cols-2 gap-3">
           {/* Head Section Control Card */}
-          <div className="bg-surface-container-lowest rounded-xl p-2.5 sm:p-3 shadow-md flex flex-col gap-1.5 sm:gap-2 border border-outline-variant/15">
-            <div className="flex justify-between items-center px-1">
-              <span className="text-[12px] sm:text-[13px] font-bold text-on-surface">
-                Head Gatch
+          <div className="bg-white rounded-xl p-3 shadow-xs flex flex-col gap-2 border border-slate-200/60">
+            <div className="flex justify-between items-center px-0.5">
+              <span className="text-xs font-bold text-slate-800 uppercase tracking-wider">
+                Head Fowler
               </span>
-              <span className="text-[10px] sm:text-[11px] px-1.5 py-0.5 rounded bg-surface-container text-primary font-bold">
-                0°-90°
+              <span className="text-[9.5px] font-bold font-mono px-1.5 py-0.5 rounded bg-slate-50 text-primary">
+                {bedState.headAngle}° / 90°
               </span>
             </div>
-            <div className="grid grid-cols-2 gap-1.5 sm:gap-2">
+            
+            {/* Actuation Buttons */}
+            <div className="grid grid-cols-2 gap-2">
               <button
                 id="btn-head-up"
                 onMouseDown={() => startHoldAction(() => adjustHead(1))}
@@ -844,12 +808,12 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
                   startHoldAction(() => adjustHead(1));
                 }}
                 onTouchEnd={stopHold}
-                className="h-[60px] sm:h-16 rounded-lg bg-surface-container flex flex-col items-center justify-center shadow-[0_3px_0_0_#dcd9d9] active:shadow-none active:translate-y-1 active:bg-primary active:text-on-primary transition-all select-none cursor-pointer"
+                className="h-[52px] rounded-lg bg-slate-50 hover:bg-slate-100 flex flex-col items-center justify-center border border-slate-200/50 hover:border-slate-300 transition-all select-none cursor-pointer"
               >
-                <span className="material-symbols-outlined text-[22px] sm:text-[24px]">
+                <span className="material-symbols-outlined text-[18px] text-primary">
                   arrow_upward
                 </span>
-                <span className="text-[10px] sm:text-[11px] font-bold mt-0.5 uppercase tracking-wide">
+                <span className="text-[9px] font-bold uppercase tracking-wider text-slate-600 mt-0.5">
                   Raise
                 </span>
               </button>
@@ -863,32 +827,34 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
                   startHoldAction(() => adjustHead(-1));
                 }}
                 onTouchEnd={stopHold}
-                className="h-[60px] sm:h-16 rounded-lg bg-surface-container flex flex-col items-center justify-center shadow-[0_3px_0_0_#dcd9d9] active:shadow-none active:translate-y-1 active:bg-primary active:text-on-primary transition-all select-none cursor-pointer"
+                className="h-[52px] rounded-lg bg-slate-50 hover:bg-slate-100 flex flex-col items-center justify-center border border-slate-200/50 hover:border-slate-300 transition-all select-none cursor-pointer"
               >
-                <span className="material-symbols-outlined text-[22px] sm:text-[24px]">
+                <span className="material-symbols-outlined text-[18px] text-primary">
                   arrow_downward
                 </span>
-                <span className="text-[10px] sm:text-[11px] font-bold mt-0.5 uppercase tracking-wide">
+                <span className="text-[9px] font-bold uppercase tracking-wider text-slate-600 mt-0.5">
                   Lower
                 </span>
               </button>
             </div>
-            <span className="text-[9.5px] sm:text-[10px] leading-none text-center text-outline uppercase font-extrabold">
-              HOLD FOR AUTO-STOP
+            <span className="text-[8px] leading-none text-center text-slate-400 uppercase font-bold tracking-wider">
+              Hold actuator pad to spin
             </span>
           </div>
 
           {/* Knee / Foot Section Control Card */}
-          <div className="bg-surface-container-lowest rounded-xl p-2.5 sm:p-3 shadow-md flex flex-col gap-1.5 sm:gap-2 border border-outline-variant/15">
-            <div className="flex justify-between items-center px-1">
-              <span className="text-[12px] sm:text-[13px] font-bold text-on-surface">
+          <div className="bg-white rounded-xl p-3 shadow-xs flex flex-col gap-2 border border-slate-200/60">
+            <div className="flex justify-between items-center px-0.5">
+              <span className="text-xs font-bold text-slate-800 uppercase tracking-wider">
                 Knee Break
               </span>
-              <span className="text-[10px] sm:text-[11px] px-1.5 py-0.5 rounded bg-surface-container text-primary font-bold">
-                0°-35°
+              <span className="text-[9.5px] font-bold font-mono px-1.5 py-0.5 rounded bg-slate-50 text-primary">
+                {bedState.kneeAngle}° / 35°
               </span>
             </div>
-            <div className="grid grid-cols-2 gap-1.5 sm:gap-2">
+
+            {/* Actuation Buttons */}
+            <div className="grid grid-cols-2 gap-2">
               <button
                 id="btn-knee-up"
                 onMouseDown={() => startHoldAction(() => adjustKnee(1))}
@@ -899,12 +865,12 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
                   startHoldAction(() => adjustKnee(1));
                 }}
                 onTouchEnd={stopHold}
-                className="h-[60px] sm:h-16 rounded-lg bg-surface-container flex flex-col items-center justify-center shadow-[0_3px_0_0_#dcd9d9] active:shadow-none active:translate-y-1 active:bg-primary active:text-on-primary transition-all select-none cursor-pointer"
+                className="h-[52px] rounded-lg bg-slate-50 hover:bg-slate-100 flex flex-col items-center justify-center border border-slate-200/50 hover:border-slate-300 transition-all select-none cursor-pointer"
               >
-                <span className="material-symbols-outlined text-[22px] sm:text-[24px]">
+                <span className="material-symbols-outlined text-[18px] text-primary">
                   arrow_upward
                 </span>
-                <span className="text-[10px] sm:text-[11px] font-bold mt-0.5 uppercase tracking-wide">
+                <span className="text-[9px] font-bold uppercase tracking-wider text-slate-600 mt-0.5">
                   Raise
                 </span>
               </button>
@@ -918,36 +884,36 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
                   startHoldAction(() => adjustKnee(-1));
                 }}
                 onTouchEnd={stopHold}
-                className="h-[60px] sm:h-16 rounded-lg bg-surface-container flex flex-col items-center justify-center shadow-[0_3px_0_0_#dcd9d9] active:shadow-none active:translate-y-1 active:bg-primary active:text-on-primary transition-all select-none cursor-pointer"
+                className="h-[52px] rounded-lg bg-slate-50 hover:bg-slate-100 flex flex-col items-center justify-center border border-slate-200/50 hover:border-slate-300 transition-all select-none cursor-pointer"
               >
-                <span className="material-symbols-outlined text-[22px] sm:text-[24px]">
+                <span className="material-symbols-outlined text-[18px] text-primary">
                   arrow_downward
                 </span>
-                <span className="text-[10px] sm:text-[11px] font-bold mt-0.5 uppercase tracking-wide">
+                <span className="text-[9px] font-bold uppercase tracking-wider text-slate-600 mt-0.5">
                   Lower
                 </span>
               </button>
             </div>
-            <span className="text-[9.5px] sm:text-[10px] leading-none text-center text-outline uppercase font-extrabold">
-              HOLD FOR AUTO-STOP
+            <span className="text-[8px] leading-none text-center text-slate-400 uppercase font-bold tracking-wider">
+              Hold actuator pad to spin
             </span>
           </div>
         </div>
       </div>
 
       {/* Section 2: Height & Quick Flat / Zero-G */}
-      <div className="grid grid-cols-2 gap-2 sm:gap-2.5">
+      <div className="grid grid-cols-2 gap-3">
         {/* Bed Elevation Module */}
-        <div className="bg-surface-container-lowest rounded-xl p-2.5 sm:p-3 shadow-md flex flex-col justify-between gap-1.5 sm:gap-2 border border-outline-variant/15">
-          <div className="flex justify-between items-center px-1">
-            <span className="text-[12px] sm:text-[13px] font-bold text-on-surface">
+        <div className="bg-white rounded-xl p-3 shadow-xs flex flex-col gap-2 border border-slate-200/60 justify-between">
+          <div className="flex justify-between items-center px-0.5">
+            <span className="text-xs font-bold text-slate-800 uppercase tracking-wider">
               Bed Elevation
             </span>
-            <span className="text-[10px] sm:text-[11px] px-1.5 py-0.5 rounded bg-surface-container text-secondary font-bold">
-              40-85cm
+            <span className="text-[9.5px] font-bold font-mono px-1.5 py-0.5 rounded bg-slate-50 text-secondary">
+              {bedState.overallHeight} cm
             </span>
           </div>
-          <div className="grid grid-cols-2 gap-1.5 sm:gap-2">
+          <div className="grid grid-cols-2 gap-2 mt-1">
             <button
               id="btn-bed-up"
               onMouseDown={() => startHoldAction(() => adjustHeight(1))}
@@ -958,12 +924,12 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
                 startHoldAction(() => adjustHeight(1));
               }}
               onTouchEnd={stopHold}
-              className="h-[60px] sm:h-16 rounded-lg bg-surface-container flex flex-col items-center justify-center shadow-[0_3px_0_0_#dcd9d9] active:shadow-none active:translate-y-1 active:bg-primary active:text-on-primary transition-all select-none cursor-pointer"
+              className="h-[48px] rounded-lg bg-slate-50 hover:bg-slate-100 flex flex-col items-center justify-center border border-slate-200/50 transition-all select-none cursor-pointer"
             >
-              <span className="material-symbols-outlined text-[22px] sm:text-[24px]">
+              <span className="material-symbols-outlined text-[18px] text-secondary">
                 vertical_align_top
               </span>
-              <span className="text-[10px] sm:text-[11px] font-bold mt-0.5 uppercase tracking-wide">
+              <span className="text-[9px] font-bold uppercase tracking-wider text-slate-600">
                 Elevate
               </span>
             </button>
@@ -977,12 +943,12 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
                 startHoldAction(() => adjustHeight(-1));
               }}
               onTouchEnd={stopHold}
-              className="h-[60px] sm:h-16 rounded-lg bg-surface-container flex flex-col items-center justify-center shadow-[0_3px_0_0_#dcd9d9] active:shadow-none active:translate-y-1 active:bg-primary active:text-on-primary transition-all select-none cursor-pointer"
+              className="h-[48px] rounded-lg bg-slate-50 hover:bg-slate-100 flex flex-col items-center justify-center border border-slate-200/50 transition-all select-none cursor-pointer"
             >
-              <span className="material-symbols-outlined text-[22px] sm:text-[24px]">
+              <span className="material-symbols-outlined text-[18px] text-secondary">
                 vertical_align_bottom
               </span>
-              <span className="text-[10px] sm:text-[11px] font-bold mt-0.5 uppercase tracking-wide">
+              <span className="text-[9px] font-bold uppercase tracking-wider text-slate-600">
                 Lower
               </span>
             </button>
@@ -990,45 +956,45 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
         </div>
 
         {/* Quick Return & Zero-G */}
-        <div className="bg-surface-container-lowest rounded-xl p-2.5 sm:p-3 shadow-md flex flex-col justify-between gap-1.5 sm:gap-2 border border-outline-variant/15">
-          <div className="flex justify-between items-center px-1">
-            <span className="text-[12px] sm:text-[13px] font-bold text-on-surface">
-              Rapid Align
+        <div className="bg-white rounded-xl p-3 shadow-xs flex flex-col gap-2 border border-slate-200/60 justify-between">
+          <div className="flex justify-between items-center px-0.5">
+            <span className="text-xs font-bold text-slate-800 uppercase tracking-wider">
+              Quick Calibrate
             </span>
-            <span className="text-[10px] sm:text-[11px] font-medium text-outline">
-              Auto-Cycle
+            <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">
+              Auto Presets
             </span>
           </div>
-          <div className="grid grid-cols-2 gap-1.5 sm:gap-2">
+          <div className="grid grid-cols-2 gap-2 mt-1">
             <button
               id="btn-preset-zerog"
               onClick={setZeroG}
-              className={`h-[60px] sm:h-16 rounded-lg bg-surface-container hover:bg-surface-variant flex flex-col items-center justify-center shadow-[0_3px_0_0_#dcd9d9] active:shadow-none active:translate-y-1 transition-all select-none cursor-pointer ${
+              className={`h-[48px] rounded-lg bg-slate-50 hover:bg-slate-100 flex flex-col items-center justify-center border transition-all cursor-pointer ${
                 bedState.activePreset === 'zerog'
-                  ? 'ring-2 ring-primary bg-primary/10'
-                  : ''
+                  ? 'border-primary bg-blue-50/50'
+                  : 'border-slate-200/50'
               }`}
             >
-              <span className="material-symbols-outlined text-[20px] sm:text-[22px] text-primary">
+              <span className="material-symbols-outlined text-[18px] text-primary">
                 airline_seat_recline_extra
               </span>
-              <span className="text-[10px] sm:text-[11px] font-bold mt-0.5 text-on-surface uppercase tracking-wide">
+              <span className="text-[9px] font-bold text-slate-700 uppercase tracking-wider">
                 Zero-G
               </span>
             </button>
             <button
               id="btn-preset-flat"
               onClick={setFlat}
-              className={`h-[60px] sm:h-16 rounded-lg bg-surface-container hover:bg-surface-variant flex flex-col items-center justify-center shadow-[0_3px_0_0_#dcd9d9] active:shadow-none active:translate-y-1 transition-all select-none cursor-pointer ${
+              className={`h-[48px] rounded-lg bg-slate-50 hover:bg-slate-100 flex flex-col items-center justify-center border transition-all cursor-pointer ${
                 bedState.activePreset === 'flat'
-                  ? 'ring-2 ring-primary bg-primary/10'
-                  : ''
+                  ? 'border-primary bg-blue-50/50'
+                  : 'border-slate-200/50'
               }`}
             >
-              <span className="material-symbols-outlined text-[20px] sm:text-[22px] text-on-surface-variant">
+              <span className="material-symbols-outlined text-[18px] text-slate-700">
                 horizontal_rule
               </span>
-              <span className="text-[10px] sm:text-[11px] font-bold mt-0.5 text-on-surface uppercase tracking-wide">
+              <span className="text-[9px] font-bold text-slate-700 uppercase tracking-wider">
                 Flat 0°
               </span>
             </button>
@@ -1036,29 +1002,24 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
         </div>
       </div>
 
-      {/* Section 2B: Trendelenburg Longitudinal Tilt (0° to 90°) */}
-      <div className="bg-surface-container-lowest rounded-xl p-2.5 sm:p-3 shadow-md flex flex-col gap-1.5 sm:gap-2 border border-outline-variant/15">
-        <div className="flex justify-between items-center px-1">
+      {/* Section 2B: Trendelenburg Longitudinal Tilt */}
+      <div className="bg-white rounded-xl p-3 shadow-xs flex flex-col gap-2 border border-slate-200/60">
+        <div className="flex justify-between items-center px-0.5">
           <div className="flex items-center gap-1.5">
-            <span className="material-symbols-outlined text-[17px] sm:text-[18px] text-secondary">
+            <span className="material-symbols-outlined text-[16px] text-secondary">
               swap_vert
             </span>
-            <span className="text-[12px] sm:text-[13px] font-bold text-on-surface">
-              Trendelenburg Tilt Plane
+            <span className="text-xs font-bold text-slate-800 uppercase tracking-wider">
+              Longitudinal Tilt Axis
             </span>
           </div>
-          <div className="flex items-center gap-1.5">
-            <span className="text-[10px] sm:text-[11px] px-1.5 py-0.5 rounded bg-surface-container text-secondary font-bold">
-              0°-90° Limit
-            </span>
-            <span className="text-[10.5px] sm:text-[11px] font-extrabold text-secondary tabular-nums">
-              {bedState.tiltAngle === 0
-                ? '0° Neutral'
-                : `${Math.abs(bedState.tiltAngle)}° ${bedState.tiltAngle < 0 ? 'Trendelenburg' : 'Rev. Trend'}`}
-            </span>
-          </div>
+          <span className="text-[10px] font-bold font-mono text-secondary">
+            {bedState.tiltAngle === 0
+              ? 'LEVEL (0°)'
+              : `${Math.abs(bedState.tiltAngle)}° ${bedState.tiltAngle < 0 ? 'TRENDELENBURG' : 'REV. TREND'}`}
+          </span>
         </div>
-        <div className="grid grid-cols-3 gap-1.5 sm:gap-2">
+        <div className="grid grid-cols-3 gap-2">
           <button
             id="btn-trend-down"
             onMouseDown={() => startHoldAction(() => adjustTilt(-1))}
@@ -1069,30 +1030,22 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
               startHoldAction(() => adjustTilt(-1));
             }}
             onTouchEnd={stopHold}
-            className="h-[52px] sm:h-14 rounded-lg bg-surface-container hover:bg-surface-variant flex flex-col items-center justify-center shadow-[0_2.5px_0_0_#dcd9d9] active:shadow-none active:translate-y-0.5 active:bg-secondary active:text-on-secondary transition-all select-none cursor-pointer"
+            className="h-[50px] rounded-lg bg-slate-50 hover:bg-slate-100 flex flex-col items-center justify-center border border-slate-200/50 transition-all select-none cursor-pointer"
           >
-            <div className="flex items-center gap-1">
-              <span className="material-symbols-outlined text-[16px] sm:text-[18px] text-secondary">
-                south
-              </span>
-              <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wide">
-                Trendelenburg
-              </span>
-            </div>
-            <span className="text-[8.5px] sm:text-[9px] text-outline font-semibold">Head Down (0°-90°)</span>
+            <span className="text-[9px] font-bold uppercase tracking-wider text-slate-600">
+              Trendelenburg
+            </span>
+            <span className="text-[8px] text-slate-400 font-semibold">Head Down</span>
           </button>
           <button
             id="btn-trend-level"
             onClick={() => adjustTilt(-bedState.tiltAngle)}
-            className="h-[52px] sm:h-14 rounded-lg bg-surface-container hover:bg-surface-variant flex flex-col items-center justify-center shadow-[0_2.5px_0_0_#dcd9d9] active:shadow-none active:translate-y-0.5 transition-all select-none cursor-pointer"
+            className="h-[50px] rounded-lg bg-slate-50 hover:bg-slate-100 flex flex-col items-center justify-center border border-slate-200/50 transition-all select-none cursor-pointer"
           >
-            <span className="material-symbols-outlined text-[16px] sm:text-[18px] text-on-surface-variant">
-              horizontal_rule
-            </span>
-            <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wide text-on-surface">
+            <span className="text-[9px] font-bold uppercase tracking-wider text-slate-700">
               Level 0°
             </span>
-            <span className="text-[8.5px] sm:text-[9px] text-outline font-semibold">Reset Horizontal</span>
+            <span className="text-[8px] text-slate-400 font-semibold">Reset</span>
           </button>
           <button
             id="btn-trend-up"
@@ -1104,142 +1057,116 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
               startHoldAction(() => adjustTilt(1));
             }}
             onTouchEnd={stopHold}
-            className="h-[52px] sm:h-14 rounded-lg bg-surface-container hover:bg-surface-variant flex flex-col items-center justify-center shadow-[0_2.5px_0_0_#dcd9d9] active:shadow-none active:translate-y-0.5 active:bg-primary active:text-on-primary transition-all select-none cursor-pointer"
+            className="h-[50px] rounded-lg bg-slate-50 hover:bg-slate-100 flex flex-col items-center justify-center border border-slate-200/50 transition-all select-none cursor-pointer"
           >
-            <div className="flex items-center gap-1">
-              <span className="material-symbols-outlined text-[16px] sm:text-[18px] text-primary">
-                north
-              </span>
-              <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wide">
-                Rev. Trend
-              </span>
-            </div>
-            <span className="text-[8.5px] sm:text-[9px] text-outline font-semibold">Head Up (0°-90°)</span>
+            <span className="text-[9px] font-bold uppercase tracking-wider text-slate-600">
+              Rev. Trend
+            </span>
+            <span className="text-[8px] text-slate-400 font-semibold">Head Up</span>
           </button>
         </div>
       </div>
 
-      {/* Section 3: Clinical Presets & Safety Incline */}
+      {/* Section 3: Clinical Presets */}
       <div className="flex flex-col gap-1.5">
-        <span className="text-[10.5px] sm:text-[11px] font-extrabold text-outline uppercase tracking-wider px-1">
-          Clinical Postures &amp; Profiles
+        <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-widest px-1">
+          Specialty Clinical Presets
         </span>
-        <div className="grid grid-cols-4 gap-1.5 sm:gap-2">
+        <div className="grid grid-cols-4 gap-2">
           {/* Cardiac Chair */}
           <button
             onClick={setCardiacChair}
-            className={`h-[76px] sm:h-20 rounded-xl p-1.5 sm:p-2 flex flex-col items-center justify-center text-center shadow-md relative overflow-hidden active:scale-95 transition-all cursor-pointer ${
+            className={`h-[72px] rounded-xl p-1.5 flex flex-col items-center justify-center text-center shadow-xs transition-all cursor-pointer ${
               bedState.activePreset === 'cardiac'
-                ? 'bg-primary text-on-primary ring-2 ring-primary'
-                : 'bg-surface-container-lowest text-on-surface hover:bg-surface-container-low'
+                ? 'bg-primary text-white border border-primary'
+                : 'bg-white text-slate-800 hover:bg-slate-50 border border-slate-200/60'
             }`}
           >
-            <span
-              className={`material-symbols-outlined text-[20px] sm:text-[22px] mb-0.5 sm:mb-1 ${
-                bedState.activePreset === 'cardiac' ? 'text-on-primary' : 'text-primary'
-              }`}
-            >
+            <span className={`material-symbols-outlined text-[18px] mb-1 ${
+              bedState.activePreset === 'cardiac' ? 'text-white' : 'text-primary'
+            }`}>
               chair
             </span>
-            <span className="text-[10px] sm:text-[11px] leading-tight font-bold">
-              Cardiac Chair
+            <span className="text-[10px] leading-tight font-bold uppercase tracking-tight">
+              Cardiac
             </span>
-            {bedState.activePreset === 'cardiac' && (
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 mt-0.5 sm:mt-1" />
-            )}
           </button>
 
-          {/* Trendelenburg with Caution Badge */}
+          {/* Trendelenburg */}
           <button
             onClick={setTrendelenburg}
-            className={`h-[76px] sm:h-20 rounded-xl p-1.5 sm:p-2 flex flex-col items-center justify-center text-center shadow-md relative active:scale-95 transition-all cursor-pointer ${
+            className={`h-[72px] rounded-xl p-1.5 flex flex-col items-center justify-center text-center shadow-xs transition-all cursor-pointer ${
               bedState.activePreset === 'trendelenburg'
-                ? 'bg-secondary-fixed text-on-secondary-fixed ring-2 ring-secondary'
-                : 'bg-surface-container-lowest text-on-surface hover:bg-surface-container-low'
+                ? 'bg-amber-600 text-white border border-amber-600'
+                : 'bg-white text-slate-800 hover:bg-slate-50 border border-slate-200/60'
             }`}
           >
-            <span className="absolute top-1 right-1 text-secondary">
-              <span className="material-symbols-outlined text-[12px] sm:text-[13px]">
-                warning
-              </span>
-            </span>
-            <span className="material-symbols-outlined text-[20px] sm:text-[22px] text-secondary mb-0.5 sm:mb-1">
+            <span className="material-symbols-outlined text-[18px] text-amber-600 mb-1">
               swap_driving_apps
             </span>
-            <span className="text-[10px] sm:text-[11px] leading-tight font-bold">
-              Trendelenburg
-            </span>
-            <span className="text-[8.5px] sm:text-[9px] text-secondary font-bold">
-              {bedState.tiltAngle !== 0 ? `Tilt ${Math.abs(bedState.tiltAngle)}°` : '0°-90° Limit'}
+            <span className="text-[10px] leading-tight font-bold uppercase tracking-tight">
+              Trend
             </span>
           </button>
 
-          {/* Memory Preset M1 */}
+          {/* Sleep Preset M1 */}
           <button
             onClick={setM1Sleep}
-            className={`h-[76px] sm:h-20 rounded-xl p-1.5 sm:p-2 flex flex-col items-center justify-center text-center shadow-md active:scale-95 transition-all cursor-pointer ${
+            className={`h-[72px] rounded-xl p-1.5 flex flex-col items-center justify-center text-center shadow-xs transition-all cursor-pointer ${
               bedState.activePreset === 'sleep'
-                ? 'bg-primary-fixed text-on-primary-fixed ring-2 ring-primary'
-                : 'bg-surface-container-lowest text-on-surface hover:bg-surface-container-low'
+                ? 'bg-primary text-white border border-primary'
+                : 'bg-white text-slate-800 hover:bg-slate-50 border border-slate-200/60'
             }`}
           >
-            <span className="material-symbols-outlined text-[20px] sm:text-[22px] text-primary mb-0.5 sm:mb-1">
+            <span className="material-symbols-outlined text-[18px] text-primary mb-1">
               bedtime
             </span>
-            <span className="text-[10px] sm:text-[11px] leading-tight font-bold">
-              M1: Sleep
-            </span>
-            <span className="text-[8.5px] sm:text-[9px] text-outline font-semibold">
-              Head 15°
+            <span className="text-[10px] leading-tight font-bold uppercase tracking-tight">
+              Sleep M1
             </span>
           </button>
 
-          {/* Memory Preset M2 */}
+          {/* Exam Preset M2 */}
           <button
             onClick={setM2Exam}
-            className={`h-[76px] sm:h-20 rounded-xl p-1.5 sm:p-2 flex flex-col items-center justify-center text-center shadow-md active:scale-95 transition-all cursor-pointer ${
+            className={`h-[72px] rounded-xl p-1.5 flex flex-col items-center justify-center text-center shadow-xs transition-all cursor-pointer ${
               bedState.activePreset === 'exam'
-                ? 'bg-primary-fixed text-on-primary-fixed ring-2 ring-primary'
-                : 'bg-surface-container-lowest text-on-surface hover:bg-surface-container-low'
+                ? 'bg-primary text-white border border-primary'
+                : 'bg-white text-slate-800 hover:bg-slate-50 border border-slate-200/60'
             }`}
           >
-            <span className="material-symbols-outlined text-[20px] sm:text-[22px] text-primary mb-0.5 sm:mb-1">
+            <span className="material-symbols-outlined text-[18px] text-primary mb-1">
               medical_services
             </span>
-            <span className="text-[10px] sm:text-[11px] leading-tight font-bold">
-              M2: Exam
-            </span>
-            <span className="text-[8.5px] sm:text-[9px] text-outline font-semibold">
-              High/Flat
+            <span className="text-[10px] leading-tight font-bold uppercase tracking-tight">
+              Exam M2
             </span>
           </button>
         </div>
       </div>
 
-      {/* Halting Emergency Strip */}
-      <div className="mt-1 sm:mt-2 w-full">
+      {/* Persistent Emergency Stop Bar */}
+      <div className="mt-1 w-full">
         <button
           onClick={onTriggerEStop}
           id="e-stop-bar"
-          className="w-full h-[58px] sm:h-16 rounded-2xl bg-tertiary text-on-tertiary flex items-center justify-between px-3.5 sm:px-5 shadow-[0_6px_20px_rgba(159,0,15,0.35)] active:brightness-90 active:scale-[0.99] transition-all cursor-pointer"
+          className="w-full h-[54px] rounded-xl bg-red-600 hover:bg-red-700 text-white flex items-center justify-between px-4 transition-all cursor-pointer shadow-xs active:scale-[0.99]"
         >
-          <div className="flex items-center gap-2.5 sm:gap-3">
-            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-white/20 flex items-center justify-center shrink-0">
-              <span className="material-symbols-outlined text-[24px] sm:text-[26px]">
-                emergency_home
-              </span>
-            </div>
+          <div className="flex items-center gap-2">
+            <span className="material-symbols-outlined text-[20px] shrink-0 fill-current">
+              pan_tool
+            </span>
             <div className="flex flex-col text-left">
-              <span className="text-[15px] sm:text-[18px] font-extrabold tracking-wide leading-tight">
-                EMERGENCY STOP
+              <span className="text-sm font-extrabold tracking-wider uppercase leading-none">
+                Emergency Stop
               </span>
-              <span className="text-[10px] sm:text-[11px] font-semibold opacity-90">
-                Instant relay cut-off across BLE &amp; Wi-Fi
+              <span className="text-[9px] font-medium opacity-80 mt-0.5">
+                Cuts mechanical relay power across channels
               </span>
             </div>
           </div>
-          <span className="material-symbols-outlined text-[24px] sm:text-[28px]">
-            pan_tool
+          <span className="material-symbols-outlined text-[18px]">
+            arrow_forward
           </span>
         </button>
       </div>

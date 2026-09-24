@@ -23,6 +23,7 @@ import {
   setAutoWifiEnabled,
   autoDetectAndAdoptAllHardware,
 } from '../services/autoHardwareConnect';
+import { esp32Bridge, ESP32ConnectionStatus } from '../services/esp32HardwareBridge';
 
 interface SettingsScreenProps {
   bedState: BedState;
@@ -269,6 +270,10 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
 
   const toggleHighContrast = () => {
     setBedState((prev) => ({ ...prev, highContrast: !prev.highContrast }));
+  };
+
+  const toggleDarkMode = () => {
+    setBedState((prev) => ({ ...prev, darkMode: !prev.darkMode }));
   };
 
   const setHaptic = (mode: 'subtle' | 'strong') => {
@@ -643,6 +648,52 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
           </div>
         )}
 
+        {/* Transmission Preference (Hybrid Dual-Link vs Single Channel) */}
+        <div className="pt-2 border-t border-outline-variant/10 flex flex-col gap-2">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-on-surface flex items-center gap-1.5">
+              <span className="material-symbols-outlined text-[16px] text-primary">alt_route</span>
+              Active Transmission Routing
+            </span>
+            <span className="text-[10px] font-bold text-primary bg-primary/10 px-2 py-0.5 rounded">
+              {esp32Bridge.getStatus().transport.toUpperCase()}
+            </span>
+          </div>
+          <p className="text-[11px] text-on-surface-variant leading-tight">
+            Hybrid sends each actuation command concurrently over Bluetooth (instant &lt;4ms response) and Wi-Fi LAN (nurse central sync).
+          </p>
+          <div className="grid grid-cols-2 gap-1.5 pt-0.5">
+            {[
+              { id: 'hybrid', label: '⚡ Hybrid Dual-Link', desc: 'Wi-Fi + BT Classic' },
+              { id: 'bt-classic', label: 'BT Classic SPP', desc: 'RFCOMM 115200' },
+              { id: 'wifi', label: 'Wi-Fi Only', desc: '192.168.4.x / LAN' },
+              { id: 'ble', label: 'BLE Nordic UART', desc: 'BLE 4.0/5.0 GATT' },
+            ].map((m) => {
+              const active = esp32Bridge.getStatus().preferredMode === m.id;
+              return (
+                <button
+                  key={m.id}
+                  onClick={() => {
+                    esp32Bridge.setPreferredMode(m.id as any);
+                    setDeviceActionNotice(`Controller mode set to ${m.label}`);
+                    setTimeout(() => setDeviceActionNotice(null), 2500);
+                  }}
+                  className={`p-2 rounded-xl text-left border cursor-pointer transition-all ${
+                    active
+                      ? 'bg-primary text-on-primary border-primary shadow-xs'
+                      : 'bg-surface-container-low hover:bg-surface-container border-outline-variant/20 text-on-surface'
+                  }`}
+                >
+                  <span className="text-[11px] font-bold block">{m.label}</span>
+                  <span className={`text-[9px] block ${active ? 'text-on-primary/80' : 'text-on-surface-variant'}`}>
+                    {m.desc}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
         <div className="flex items-center justify-between pt-1 border-t border-outline-variant/10 text-xs">
           <div className="flex items-center gap-2">
             <span
@@ -952,6 +1003,27 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
             onClick={toggleHighContrast}
             className={`w-12 h-7 rounded-full p-0.5 transition-colors flex items-center cursor-pointer ${
               bedState.highContrast ? 'bg-primary justify-end' : 'bg-surface-variant justify-start'
+            }`}
+          >
+            <div className="w-6 h-6 rounded-full bg-on-primary shadow-xs" />
+          </button>
+        </div>
+
+        {/* Dark Mode Theme */}
+        <div className="flex items-center justify-between pt-1 border-t border-outline-variant/10">
+          <div className="flex flex-col">
+            <span className="text-[13px] font-bold text-on-surface">
+              Dark Mode (Night-Shift)
+            </span>
+            <span className="text-xs text-on-surface-variant">
+              Reduce eye strain for night-shift clinical staff
+            </span>
+          </div>
+          <button
+            id="toggle-dark-mode"
+            onClick={toggleDarkMode}
+            className={`w-12 h-7 rounded-full p-0.5 transition-colors flex items-center cursor-pointer ${
+              bedState.darkMode ? 'bg-primary justify-end' : 'bg-surface-variant justify-start'
             }`}
           >
             <div className="w-6 h-6 rounded-full bg-on-primary shadow-xs" />

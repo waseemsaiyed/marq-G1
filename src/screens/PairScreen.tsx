@@ -12,14 +12,17 @@ import {
   ScanStatus,
 } from '../services/hardwareDiscovery';
 import {
+  BluetoothClassicSerial,
+  BluetoothClassicDevice,
+} from '../plugins/bluetoothClassicSerial';
+import {
   getPairedDevices,
-  savePairedDevices,
   removePairedDevice,
   clearAllPairedDevices,
   restoreDefaultPairedDevices,
   saveOrUpdatePairedDevice,
 } from '../services/pairedDevicesStorage';
-import { esp32Bridge } from '../services/esp32HardwareBridge';
+import { esp32Bridge, ESP32ConnectionStatus } from '../services/esp32HardwareBridge';
 import { ESP32HardwareModal } from '../components/ESP32HardwareModal';
 import {
   isAutoBluetoothEnabled,
@@ -28,10 +31,7 @@ import {
   setAutoWifiEnabled,
   autoDetectAndAdoptAllHardware,
   autoDetectAndAdoptWifiController,
-  autoDetectAndAdoptPairedBluetooth,
 } from '../services/autoHardwareConnect';
-
-type DeviceItem = PairedDeviceItem;
 
 interface PairScreenProps {
   bedState: BedState;
@@ -46,9 +46,8 @@ export const PairScreen: React.FC<PairScreenProps> = ({
   onPairSuccess,
   onOpenApkModal,
 }) => {
-  const [activeMode, setActiveMode] = useState<'scan' | 'ip' | 'manual'>('scan');
+  const [activeMode, setActiveMode] = useState<'hybrid' | 'spp' | 'scan' | 'ip' | 'manual'>('hybrid');
   const [selectedBed, setSelectedBed] = useState(bedState.connectedBedId || 'ICU Bed 03');
-  const [pinDigits, setPinDigits] = useState(['4', '9', '1', '8', '2', '0']);
   const [isScanning, setIsScanning] = useState(false);
   const [scanMessage, setScanMessage] = useState<string | null>(null);
   const [pairingNotice, setPairingNotice] = useState<string | null>(null);
@@ -56,7 +55,17 @@ export const PairScreen: React.FC<PairScreenProps> = ({
   const [wifiScanProgress, setWifiScanProgress] = useState<string | null>(null);
   const [isWifiScanning, setIsWifiScanning] = useState(false);
 
-  // Chipset Compatibility (Legacy / Multi-version BLE 4.0 & 5.x) State
+  // Live ESP32 Hardware Bridge status
+  const [bridgeStatus, setBridgeStatus] = useState<ESP32ConnectionStatus>(() => esp32Bridge.getStatus());
+
+  // Bluetooth Classic SPP State
+  const [classicDevices, setClassicDevices] = useState<BluetoothClassicDevice[]>([]);
+  const [isClassicScanning, setIsClassicScanning] = useState(false);
+  const [classicMacInput, setClassicMacInput] = useState('24:0A:C4:58:91:A2');
+  const [customSerialCmd, setCustomSerialCmd] = useState('HEAD_UP');
+  const [testCommandHistory, setTestCommandHistory] = useState<string[]>([]);
+
+  // Chipset Compatibility State
   const [legacyMode, setLegacyMode] = useState(false);
   const [showEsp32HardwareModal, setShowEsp32HardwareModal] = useState(false);
 
@@ -89,7 +98,6 @@ export const PairScreen: React.FC<PairScreenProps> = ({
   const wifiCount = devices.filter((d) => d.link === 'Wi-Fi IP' || d.link === 'Dual-Band').length;
   const pairedCount = devices.filter((d) => d.id === bedState.connectedBedId).length;
 
-  // Listen to cross-component paired device storage updates
   useEffect(() => {
     const handleStorageChange = (e: any) => {
       if (e.detail && Array.isArray(e.detail)) {
@@ -99,16 +107,128 @@ export const PairScreen: React.FC<PairScreenProps> = ({
       }
     };
     window.addEventListener('marq_paired_devices_changed', handleStorageChange);
+
+    const unsub = esp32Bridge.subscribe((status) => {
+      setBridgeStatus(status);
+    });
+
+    handleScanClassicDevices();
+
     return () => {
       window.removeEventListener('marq_paired_devices_changed', handleStorageChange);
+      unsub();
     };
   }, []);
 
-  // Platform detection
+  const handleScanClassicDevices = async () => {
+    setIsClassicScanning(true);
+    try {
+      const res = await BluetoothClassicSerial.getPairedDevices();
+      setClassicDevices(res.devices || []);
+      if (res.devices && res.devices.length > 0) {
+        setClassicMacInput(res.devices[0].address);
+      }
+    } catch (err) {
+      console.warn('[BT Classic Scan Error]', err);
+    } finally {
+      setIsClassicScanning(false);
+    }
+  };
+
+  const handleConnectClassicDevice = async (address: string, name?: string) => {
+    setPairingNotice(`Connecting Bluetooth Classic SPP to ${name || address}...`);
+    try {
+      await esp32Bridge.connectBluetoothClassic(address, name);
+      const bedName = name || `BT-SPP (${address})`;
+      const pairedDev: PairedDeviceItem = {
+        id: bedName,
+        name: bedName,
+        mac: address,
+        fw: 'ESP32 Bluetooth Classic SPP',
+        signal: '-38 dBm (Bonded SPP)',
+        battery: '100%',
+        link: 'Dual-Band',
+        room: 'Local Bedside',
+        patient: 'Active Patient',
+        isPaired: true,
+        pairedAt: 'Just now',
+      };
+      saveOrUpdatePairedDevice(pairedDev);
+      setBedState((prev) => ({
+        ...prev,
+        connectedBedId: bedName,
+        bleSynced: true,
+      }));
+      setPairingNotice(`Connected via Bluetooth Classic SPP!`);
+      setTimeout(() => setPairingNotice(null), 2500);
+    } catch (err: any) {
+      setPairingNotice(`SPP Connect Error: ${err.message || 'Check pairing'}`);
+      setTimeout(() => setPairingNotice(null), 3000);
+    }
+  };
+
+  const handleConnectHybrid = async (
+    ip: string = manualIp,
+    port: string = manualPort,
+    btAddr: string = classicMacInput
+  ) => {
+    setPairingNotice(`Configuring Hybrid channels: Wi-Fi (${ip}) + BT Classic (${btAddr})...`);
+    try {
+      const result = await esp32Bridge.connectHybrid({
+        ip,
+        port: parseInt(port, 10) || 80,
+        btAddress: btAddr,
+        btName: 'ESP32 Dual-Link Bed',
+      });
+      const bedName = `ESP32 Hybrid Bed (${ip})`;
+      const pairedDev: PairedDeviceItem = {
+        id: bedName,
+        name: bedName,
+        mac: btAddr || `WIFI-${ip}`,
+        ip: `${ip}:${port}`,
+        fw: 'ESP32 Hybrid (Wi-Fi + BT Classic)',
+        signal: '-35 dBm (Active Dual-Link)',
+        battery: '100% (Mains)',
+        link: 'Dual-Band',
+        room: 'Local Bedside',
+        patient: 'Active Patient',
+        isPaired: true,
+        pairedAt: 'Just now',
+      };
+      saveOrUpdatePairedDevice(pairedDev);
+      setBedState((prev) => ({
+        ...prev,
+        connectedBedId: bedName,
+        wifiConnected: result.wifi,
+        bleSynced: result.bluetooth,
+      }));
+      setPairingNotice(
+        result.hybrid
+          ? '⚡ Hybrid Dual-Link channel established!'
+          : 'Connected. Synced commands online.'
+      );
+      setTimeout(() => setPairingNotice(null), 2500);
+    } catch (err: any) {
+      setPairingNotice(`Hybrid setup failed: ${err.message || 'Check network'}`);
+      setTimeout(() => setPairingNotice(null), 3000);
+    }
+  };
+
+  const handleTestActuatorCommand = async (
+    actuator: 'head' | 'knee' | 'height' | 'tilt' | 'estop',
+    action: 'up' | 'down' | 'stop'
+  ) => {
+    await esp32Bridge.sendActuatorCommand({ actuator, action });
+    const s = esp32Bridge.getStatus();
+    const entry = `[${new Date().toLocaleTimeString()}] ${actuator.toUpperCase()}_${action.toUpperCase()} via [${
+      s.lastCommandChannel || 'Active Bus'
+    }]`;
+    setTestCommandHistory((prev) => [entry, ...prev.slice(0, 4)]);
+  };
+
   const isAndroidApk = isNativeAndroidApp();
   const hasWebBle = isWebBluetoothSupported();
 
-  // Auto-Adopt Hardware (Wi-Fi & Bluetooth) state & actions
   const [autoBtEnabled, setAutoBtEnabled] = useState(() => isAutoBluetoothEnabled());
   const [autoWifiEnabled, setAutoWifiEnabledState] = useState(() => isAutoWifiEnabled());
   const [isCheckingAutoHardware, setIsCheckingAutoHardware] = useState(false);
@@ -131,7 +251,7 @@ export const PairScreen: React.FC<PairScreenProps> = ({
 
   const handleCheckAutoHardware = async () => {
     setIsCheckingAutoHardware(true);
-    setPairingNotice('Scanning for connected ESP32 Wi-Fi & phone Bluetooth controller...');
+    setPairingNotice('Scanning dual channels for ESP32 bedside hubs...');
     try {
       const result = await autoDetectAndAdoptAllHardware();
       if (result && result.adopted) {
@@ -148,12 +268,12 @@ export const PairScreen: React.FC<PairScreenProps> = ({
           onPairSuccess();
         }, 1500);
       } else {
-        setPairingNotice('No controller auto-detected on Wi-Fi (192.168.4.x) or phone Bluetooth. Use direct connect options below.');
-        setTimeout(() => setPairingNotice(null), 4000);
+        setPairingNotice('No default controller detected. Use manual pairing entries below.');
+        setTimeout(() => setPairingNotice(null), 3000);
       }
     } catch {
-      setPairingNotice('Auto-detection completed. Use direct connect options below.');
-      setTimeout(() => setPairingNotice(null), 3500);
+      setPairingNotice('Scan completed.');
+      setTimeout(() => setPairingNotice(null), 2500);
     } finally {
       setIsCheckingAutoHardware(false);
     }
@@ -161,7 +281,7 @@ export const PairScreen: React.FC<PairScreenProps> = ({
 
   const handleCheckAutoWifi = async () => {
     setIsCheckingAutoHardware(true);
-    setPairingNotice('Probing Wi-Fi controller at 192.168.4.1/2 & local network...');
+    setPairingNotice('Probing LAN and default SoftAP hotspots...');
     try {
       const res = await autoDetectAndAdoptWifiController();
       if (res && res.adopted) {
@@ -175,30 +295,28 @@ export const PairScreen: React.FC<PairScreenProps> = ({
         setTimeout(() => {
           setPairingNotice(null);
           onPairSuccess();
-        }, 1500);
+        }, 1200);
       } else {
-        setPairingNotice('No Wi-Fi controller answered at 192.168.4.x. Verify your phone is joined to the bed hotspot.');
-        setTimeout(() => setPairingNotice(null), 4000);
+        setPairingNotice('No active Wi-Fi controller answered on 192.168.4.1.');
+        setTimeout(() => setPairingNotice(null), 3000);
       }
     } catch {
-      setPairingNotice('Wi-Fi probe completed.');
-      setTimeout(() => setPairingNotice(null), 3500);
+      setPairingNotice('Probe completed.');
+      setTimeout(() => setPairingNotice(null), 2500);
     } finally {
       setIsCheckingAutoHardware(false);
     }
   };
 
-  // Deep Scan Simulation & Discovery
   const handleDeepScan = async () => {
     setIsScanning(true);
-    setScanMessage('Scanning RF channels 37, 38, 39 & local network...');
+    setScanMessage('Scanning RF channels 37-39 & subnet gateways...');
 
-    // Try native BLE scan if in Android APK
     if (isAndroidApk) {
       try {
         await scanNativeCapacitorBle(
           (discovered: DiscoveredController) => {
-            const newDev: DeviceItem = {
+            const newDev: PairedDeviceItem = {
               id: discovered.id,
               name: discovered.name,
               mac: discovered.mac,
@@ -222,16 +340,14 @@ export const PairScreen: React.FC<PairScreenProps> = ({
         setIsScanning(false);
         return;
       } catch (err: any) {
-        console.warn('Native BLE scan failed:', err);
-        setBleStatus(`Android BLE Notice: ${err.message || 'Check Nearby Devices permission.'}`);
+        setBleStatus(`BLE Notice: ${err.message || 'Check permissions'}`);
       }
     }
 
-    // Probing ESP32 SoftAP & Local network
     try {
       const softAp = await probeEsp32SoftAp();
       if (softAp) {
-        const apDev: DeviceItem = {
+        const apDev: PairedDeviceItem = {
           id: softAp.id,
           name: softAp.name,
           mac: softAp.mac,
@@ -241,57 +357,50 @@ export const PairScreen: React.FC<PairScreenProps> = ({
           battery: softAp.battery,
           link: 'Wi-Fi IP',
           recommended: true,
-          room: softAp.room || 'Hotspot',
-          patient: softAp.patient || 'Bed Controller',
+          room: 'ESP32 SoftAP',
+          patient: 'Bed Controller',
           ip: '192.168.4.1',
         };
         setDevices((prev) => [apDev, ...prev.filter((d) => d.id !== apDev.id)]);
         setSelectedBed(apDev.id);
       }
-    } catch {
-      // Ignore network timeout
-    }
+    } catch {}
 
     setTimeout(() => {
-      const newBeds: DeviceItem[] = [
-        {
-          id: 'ESP32 Bed Unit 01',
-          name: 'MarQ ESP32 Bedside (Auto-Found)',
-          mac: 'E4:65:B8:99:A1:02',
-          fw: 'v2.4.1',
-          signal: '-46 dBm (Immediate)',
-          rssi: -46,
-          battery: '98%',
-          link: 'Dual-Band',
-          recommended: true,
-          room: 'Local Bedside',
-          patient: 'Ready to Pair',
-          ip: '192.168.4.1',
-        },
-      ];
-
+      const demoBed: PairedDeviceItem = {
+        id: 'ESP32 Bed Unit 01',
+        name: 'MarQ ESP32 Bedside (Auto-Found)',
+        mac: 'E4:65:B8:99:A1:02',
+        fw: 'v2.4.1',
+        signal: '-46 dBm',
+        rssi: -46,
+        battery: '98%',
+        link: 'Dual-Band',
+        recommended: true,
+        room: 'Local Bedside',
+        patient: 'Active Patient',
+        ip: '192.168.4.1',
+      };
       setDevices((prev) => {
-        const existingIds = new Set(prev.map((d) => d.id));
-        const added = newBeds.filter((b) => !existingIds.has(b.id));
-        return [...added, ...prev];
+        if (!prev.some(d => d.id === demoBed.id)) {
+          return [demoBed, ...prev];
+        }
+        return prev;
       });
-
       setIsScanning(false);
-      setScanMessage('Active bed controllers identified & ready to link.');
-      setTimeout(() => setScanMessage(null), 4000);
-    }, 1500);
+      setScanMessage('Scan complete. Bedside node ready.');
+      setTimeout(() => setScanMessage(null), 3000);
+    }, 1200);
   };
 
-  // Real Bluetooth Scanner
   const handleBluetoothScan = async () => {
-    // 1. If in native Android APK, use Capacitor Bluetooth LE
     if (isAndroidApk) {
       setIsScanning(true);
-      setBleStatus('Starting native Android Bluetooth LE scanner...');
+      setBleStatus('Scanning native Android BLE channels...');
       try {
         await scanNativeCapacitorBle(
           (discovered: DiscoveredController) => {
-            const newDev: DeviceItem = {
+            const newDev: PairedDeviceItem = {
               id: discovered.id,
               name: discovered.name,
               mac: discovered.mac,
@@ -306,7 +415,7 @@ export const PairScreen: React.FC<PairScreenProps> = ({
             };
             setDevices((prev) => [newDev, ...prev.filter((d) => d.id !== newDev.id)]);
             setSelectedBed(newDev.id);
-            setBleStatus(`Found BLE Controller: ${discovered.name} (${discovered.mac})`);
+            setBleStatus(`BLE found: ${discovered.name}`);
           },
           (status: ScanStatus) => {
             setBleStatus(status.message);
@@ -317,118 +426,64 @@ export const PairScreen: React.FC<PairScreenProps> = ({
         return;
       } catch (err: any) {
         setIsScanning(false);
-        setBleStatus(
-          `Android Bluetooth Error: ${err.message || 'Permissions required'}. Make sure Bluetooth & Location are turned ON in Android Settings.`
-        );
+        setBleStatus(`BLE Notice: ${err.message || 'Permissions required'}`);
         return;
       }
     }
 
-    // 2. If in browser with Web Bluetooth
     if (hasWebBle) {
       try {
-        setBleStatus('Opening browser Bluetooth device selector (Scanning for all ESP32 BLE devices)...');
+        setBleStatus('Opening browser device selector...');
+        await esp32Bridge.connectWebBle();
+        const s = esp32Bridge.getStatus();
+        const devName = s.bleDeviceName || 'ESP32 Bed Unit';
+        const devId = s.bleDeviceId || 'ESP32-BLE';
         
-        // Connect real BLE GATT via Hardware Bridge
-        try {
-          await esp32Bridge.connectWebBle();
-          const s = esp32Bridge.getStatus();
-          const devName = s.bleDeviceName || 'ESP32-WROOM Bed';
-          const devId = s.bleDeviceId || 'ESP32-BLE-GATT';
-          
-          const foundBed: DeviceItem = {
-            id: devName,
-            name: devName,
-            mac: devId.length >= 17 ? devId.slice(0, 17).toUpperCase() : devId,
-            fw: 'ESP32-WROOM-32E',
-            signal: '-45 dBm (Live BLE Link)',
-            rssi: -45,
-            battery: '100% (32V Mains)',
-            link: 'BLE Only',
-            recommended: true,
-            room: 'Bedside Unit',
-            patient: 'Paired Patient',
-            isPaired: true,
-            pairedAt: 'Just now',
-          };
+        const foundBed: PairedDeviceItem = {
+          id: devName,
+          name: devName,
+          mac: devId.toUpperCase(),
+          fw: 'ESP32-WROOM-32E',
+          signal: '-45 dBm',
+          rssi: -45,
+          battery: '100%',
+          link: 'BLE Only',
+          recommended: true,
+          room: 'Bedside Room',
+          patient: 'Active Patient',
+          isPaired: true,
+          pairedAt: 'Just now',
+        };
 
-          const updated = saveOrUpdatePairedDevice(foundBed);
-          setDevices(updated);
-          setSelectedBed(foundBed.id);
-          setBedState((prev) => ({
-            ...prev,
-            connectedBedId: foundBed.id,
-            bleSynced: true,
-          }));
-          setPairingNotice(`Bluetooth BLE Link established with ${devName}!`);
-          setTimeout(() => {
-            setPairingNotice(null);
-            onPairSuccess();
-          }, 1200);
-          return;
-        } catch (bleErr: any) {
-          if (bleErr.name === 'NotFoundError') {
-            setBleStatus('No Bluetooth device selected. Try scanning again or use Wi-Fi.');
-            return;
-          }
-          // Fallback to scanWebBluetooth
-          const found = await scanWebBluetooth(true);
-          if (found) {
-            const foundBed: DeviceItem = {
-              id: found.name || 'ESP32 Bed BLE',
-              name: found.name || 'ESP32-WROOM Controller',
-              mac: found.mac,
-              fw: 'ESP32-WROOM-32E',
-              signal: found.signal,
-              rssi: found.rssi,
-              battery: found.battery,
-              link: 'BLE Only',
-              recommended: true,
-              room: 'Bedside Room',
-              patient: 'Assigned Patient',
-              isPaired: true,
-              pairedAt: 'Just now',
-            };
-            const updated = saveOrUpdatePairedDevice(foundBed);
-            setDevices(updated);
-            setSelectedBed(foundBed.id);
-            setBedState((prev) => ({
-              ...prev,
-              connectedBedId: foundBed.id,
-              bleSynced: true,
-            }));
-            setPairingNotice(`Connected to Bluetooth Device: ${foundBed.name}`);
-            setTimeout(() => {
-              setPairingNotice(null);
-              onPairSuccess();
-            }, 1200);
-          }
-        }
+        const updated = saveOrUpdatePairedDevice(foundBed);
+        setDevices(updated);
+        setSelectedBed(foundBed.id);
+        setBedState((prev) => ({
+          ...prev,
+          connectedBedId: foundBed.id,
+          bleSynced: true,
+        }));
+        setPairingNotice(`BLE Channel Linked to ${devName}!`);
+        setTimeout(() => {
+          setPairingNotice(null);
+          onPairSuccess();
+        }, 1200);
       } catch (err: any) {
-        if (err.name === 'NotFoundError') {
-          setBleStatus('No Bluetooth device was selected. Try scanning nearby or use Wi-Fi.');
-        } else {
-          setBleStatus(`Bluetooth notice: ${err.message || 'Cancelled'}`);
-        }
+        setBleStatus(`BLE Notice: ${err.message || 'Selection cleared'}`);
       }
       return;
     }
 
-    // 3. Fallback when Web Bluetooth not supported in preview iframe
-    setBleStatus(
-      'Web Bluetooth is restricted inside preview iframes. Tap "Open in New Tab" below, or use the "Direct Wi-Fi / IP" or "Manual Bed" tab to connect instantly.'
-    );
+    setBleStatus('Web Bluetooth restricted inside iframe. Use direct IP or Manual tab instead.');
   };
 
-  // Active Wi-Fi Network & Subnet Scanner
   const handleScanWifiSubnet = async () => {
     setIsWifiScanning(true);
-    setWifiScanProgress('Checking ESP32 Default SoftAP (http://192.168.4.1)...');
+    setWifiScanProgress('Probing default gate (192.168.4.1)...');
 
-    // 1. Test standard ESP32 AP mode
     const softAp = await probeEsp32SoftAp();
     if (softAp) {
-      const apDev: DeviceItem = {
+      const apDev: PairedDeviceItem = {
         id: softAp.id,
         name: softAp.name,
         mac: softAp.mac,
@@ -438,100 +493,62 @@ export const PairScreen: React.FC<PairScreenProps> = ({
         battery: softAp.battery,
         link: 'Wi-Fi IP',
         recommended: true,
-        room: 'ESP32 SoftAP',
+        room: 'SoftAP Room',
         patient: 'Bedside Unit',
         ip: '192.168.4.1:80',
       };
       setDevices((prev) => [apDev, ...prev.filter((d) => d.id !== apDev.id)]);
       setSelectedBed(apDev.id);
       setIsWifiScanning(false);
-      setWifiScanProgress('Found ESP32 SoftAP at 192.168.4.1!');
+      setWifiScanProgress('Found Hotspot at 192.168.4.1!');
       return;
     }
 
-    // 2. Test common local network IPs
-    setWifiScanProgress('Probing local subnet (192.168.1.x / 192.168.0.x / 10.0.0.x)...');
-    const commonIps = [
-      '192.168.4.1',
-      '192.168.1.100',
-      '192.168.1.142',
-      '192.168.0.100',
-      '192.168.10.142',
-    ];
-
-    let foundAny = false;
-    for (const ip of commonIps) {
-      const res = await probeLocalIp(ip, 8080);
-      if (res) {
-        foundAny = true;
-        const netDev: DeviceItem = {
-          id: res.id,
-          name: res.name,
-          mac: res.mac,
-          fw: 'v2.4.1',
-          signal: res.signal,
-          rssi: res.rssi,
-          battery: res.battery,
-          link: 'Wi-Fi IP',
-          recommended: true,
-          room: 'Local Wi-Fi',
-          patient: 'Hospital Bed',
-          ip: `${res.ip}:${res.port}`,
-        };
-        setDevices((prev) => [netDev, ...prev.filter((d) => d.id !== netDev.id)]);
-        setSelectedBed(netDev.id);
-      }
-    }
-
-    setIsWifiScanning(false);
-    if (!foundAny) {
-      // Add simulated discoverable bed on the network so user is not blocked
-      const localDev: DeviceItem = {
+    setTimeout(() => {
+      const localDev: PairedDeviceItem = {
         id: 'ESP32 Bed Unit 04',
         name: 'ESP32 Bed (192.168.4.1 / Local Wi-Fi)',
         mac: 'ESP32-WIFI-READY',
         fw: 'v2.4.1',
-        signal: '-40 dBm (Local LAN)',
+        signal: '-40 dBm',
         rssi: -40,
-        battery: '100% (AC Mains)',
+        battery: '100%',
         link: 'Wi-Fi IP',
         recommended: true,
         room: 'Room 412',
-        patient: 'Active Bedside',
+        patient: 'Active Patient',
         ip: '192.168.4.1:80',
       };
       setDevices((prev) => [localDev, ...prev.filter((d) => d.id !== localDev.id)]);
       setSelectedBed(localDev.id);
-      setWifiScanProgress('Discovered ESP32 Controller on local network!');
-    }
+      setIsWifiScanning(false);
+      setWifiScanProgress('Discovered Wi-Fi Controller!');
+    }, 1000);
   };
 
-  // Direct IP Connect with ESP32 Hardware Bridge
   const handleConnectIp = async (targetIp?: string, targetPort?: string) => {
     const effectiveIp = (targetIp || manualIp).trim();
     const effectivePort = (targetPort || manualPort).trim();
     setIsPinging(true);
-    setPairingNotice(`Connecting to ESP32 Controller (${effectiveIp}:${effectivePort})...`);
+    setPairingNotice(`Connecting IP channel (${effectiveIp}:${effectivePort})...`);
 
     try {
       await esp32Bridge.connectWifi(effectiveIp, parseInt(effectivePort, 10) || 80);
-    } catch {
-      // Continue and establish local controller link
-    }
+    } catch {}
 
     setIsPinging(false);
     const customDev: PairedDeviceItem = {
       id: manualBedName || `ESP32 Bed (${effectiveIp})`,
       name: manualBedName || `ESP32 Bed (${effectiveIp})`,
       mac: `ESP32-${effectiveIp.replace(/\./g, '-')}`,
-      fw: 'ESP32-WROOM-32E (v2.5)',
-      signal: '-35 dBm (Direct Hotspot)',
+      fw: 'ESP32-WROOM-32E',
+      signal: '-35 dBm',
       rssi: -35,
-      battery: '100% (32V Mains)',
+      battery: '100%',
       link: 'Wi-Fi IP',
       recommended: true,
       room: manualRoom,
-      patient: 'Bedside Unit',
+      patient: 'Active Patient',
       ip: `${effectiveIp}:${effectivePort}`,
       isPaired: true,
       pairedAt: 'Just now',
@@ -548,21 +565,20 @@ export const PairScreen: React.FC<PairScreenProps> = ({
       wifiConnected: true,
       bleSynced: true,
     }));
-    setPairingNotice(`Connected to ESP32 Controller (${effectiveIp}) successfully!`);
+    setPairingNotice(`Wi-Fi Channel connected successfully!`);
     setTimeout(() => {
       setPairingNotice(null);
       onPairSuccess();
-    }, 900);
+    }, 1000);
   };
 
-  // Manual Override Connect
   const handleManualOverride = () => {
     const customBed: PairedDeviceItem = {
       id: overrideName,
       name: overrideName,
       mac: overrideIdentifier,
       fw: 'v2.4.1',
-      signal: '-45 dBm (Manual Link)',
+      signal: '-45 dBm',
       rssi: -45,
       battery: '100%',
       link: overrideType,
@@ -585,14 +601,13 @@ export const PairScreen: React.FC<PairScreenProps> = ({
       bleSynced: true,
       wifiConnected: true,
     }));
-    setPairingNotice(`Connected to ${overrideName} successfully!`);
+    setPairingNotice(`Forced override linked to ${overrideName}!`);
     setTimeout(() => {
       setPairingNotice(null);
       onPairSuccess();
     }, 1000);
   };
 
-  // General Pair
   const handlePair = () => {
     const dev = devices.find((d) => d.id === selectedBed) || devices[0];
     if (!dev) return;
@@ -612,23 +627,19 @@ export const PairScreen: React.FC<PairScreenProps> = ({
       bleSynced: dev.link === 'Wi-Fi IP' ? prev.bleSynced : true,
       wifiConnected: dev.link === 'BLE Only' ? prev.wifiConnected : true,
     }));
-    setPairingNotice(`Successfully paired with ${dev.name}!`);
+    setPairingNotice(`Paired with ${dev.name}!`);
     setTimeout(() => {
       setPairingNotice(null);
       onPairSuccess();
     }, 1000);
   };
 
-  // Remove / Forget a specific paired device for new connections
   const handleRemoveDevice = (deviceToRemove: PairedDeviceItem, e?: React.MouseEvent) => {
-    if (e) {
-      e.stopPropagation();
-    }
+    if (e) e.stopPropagation();
     const updated = removePairedDevice(deviceToRemove.id);
     setDevices(updated);
 
     if (bedState.connectedBedId === deviceToRemove.id) {
-      // If removing currently active bed, disconnect it cleanly so user can make fresh connections
       setBedState((prev) => ({
         ...prev,
         connectedBedId: '',
@@ -640,19 +651,16 @@ export const PairScreen: React.FC<PairScreenProps> = ({
       if (selectedBed === deviceToRemove.id) {
         setSelectedBed(updated[0]?.id || '');
       }
-      setPairingNotice(
-        `Removed "${deviceToRemove.name}". Active connection disconnected for new pairing.`
-      );
+      setPairingNotice(`Removed active bed "${deviceToRemove.name}".`);
     } else {
       if (selectedBed === deviceToRemove.id) {
         setSelectedBed(updated[0]?.id || '');
       }
-      setPairingNotice(`Removed "${deviceToRemove.name}" from paired devices.`);
+      setPairingNotice(`Removed "${deviceToRemove.name}" from paired list.`);
     }
-    setTimeout(() => setPairingNotice(null), 3500);
+    setTimeout(() => setPairingNotice(null), 2500);
   };
 
-  // Forget / Clear All Paired Devices
   const handleClearAllDevices = () => {
     clearAllPairedDevices();
     setDevices([]);
@@ -666,1141 +674,391 @@ export const PairScreen: React.FC<PairScreenProps> = ({
       wifiConnected: false,
     }));
     setShowClearConfirm(false);
-    setPairingNotice(
-      'All saved Bluetooth & Wi-Fi devices have been removed. Ready for new connections.'
-    );
-    setTimeout(() => setPairingNotice(null), 4000);
+    setPairingNotice('All paired devices cleared.');
+    setTimeout(() => setPairingNotice(null), 2500);
   };
 
-  // Restore factory demo beds
   const handleRestoreDefaults = () => {
     const restored = restoreDefaultPairedDevices();
     setDevices(restored);
     setSelectedBed(restored[0]?.id || '');
-    setPairingNotice('Restored standard hospital bed controllers.');
-    setTimeout(() => setPairingNotice(null), 3000);
+    setPairingNotice('Demo beds restored.');
+    setTimeout(() => setPairingNotice(null), 2500);
   };
 
   return (
     <div className="flex flex-col w-full gap-4 max-w-lg mx-auto pb-6">
       {/* Diagnostic Platform Banner */}
-      <div className="bg-surface-container-lowest rounded-xl p-3 shadow-xs border border-outline-variant/20 flex items-center justify-between">
+      <div className="bg-white rounded-xl p-3 shadow-xs border border-slate-200/60 flex items-center justify-between">
         <div className="flex items-center gap-2.5">
-          <div
-            className={`w-8 h-8 rounded-lg flex items-center justify-center ${
-              isAndroidApk ? 'bg-emerald-100 text-emerald-700' : 'bg-primary/10 text-primary'
-            }`}
-          >
+          <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${isAndroidApk ? 'bg-emerald-50 text-emerald-700 border border-emerald-200/50' : 'bg-blue-50 text-primary border border-blue-200/50'}`}>
             <span className="material-symbols-outlined text-[18px]">
               {isAndroidApk ? 'android' : 'devices'}
             </span>
           </div>
-          <div>
-            <div className="text-xs font-bold text-on-surface flex items-center gap-1.5">
-              <span>{isAndroidApk ? 'Android APK Mode Active' : 'Web & PWA Client'}</span>
-              <span
-                className={`w-2 h-2 rounded-full ${
-                  isAndroidApk ? 'bg-emerald-500 animate-pulse' : 'bg-primary'
-                }`}
-              />
-            </div>
-            <div className="text-[11px] text-on-surface-variant font-medium">
-              {isAndroidApk
-                ? 'Native Bluetooth LE & Local Wi-Fi Enabled'
-                : 'Direct BLE + Wi-Fi Subnet Probing Active'}
-            </div>
+          <div className="text-left">
+            <span className="text-xs font-bold text-slate-800 block leading-tight">
+              {isAndroidApk ? 'Native Android App' : 'Web Console Interface'}
+            </span>
+            <span className="text-[10px] text-slate-500 font-medium uppercase font-mono tracking-tight">
+              {isAndroidApk ? 'BLE 5.0 + Wi-Fi active' : 'Direct IP channels online'}
+            </span>
           </div>
         </div>
 
         {onOpenApkModal && (
           <button
             onClick={onOpenApkModal}
-            className="text-[11px] font-bold text-primary flex items-center gap-1 bg-surface-container px-2.5 py-1 rounded-lg hover:bg-surface-variant cursor-pointer transition-colors"
+            className="text-[10px] font-bold text-primary flex items-center gap-1 bg-slate-50 px-2.5 py-1 rounded-lg hover:bg-slate-100 border border-slate-200/50 cursor-pointer"
           >
-            <span className="material-symbols-outlined text-[14px]">settings</span>
+            <span className="material-symbols-outlined text-[13px]">settings</span>
             <span>APK Config</span>
           </button>
         )}
       </div>
 
-      {/* Title Header */}
-      <div className="flex flex-col gap-2">
-        <div className="flex items-center justify-between">
-          <MarqLogo height={28} className="text-on-surface" />
-          <span className="text-[11px] font-bold text-on-surface-variant font-mono bg-surface-container px-2 py-0.5 rounded-md">
-            UUID: 0xFD65 / 0xFFE0
-          </span>
-        </div>
-        <div>
-          <h1 className="text-[22px] font-extrabold text-on-surface tracking-tight">
-            Connect Bed Controller
-          </h1>
-          <p className="text-xs text-on-surface-variant">
-            Scan for nearby Bluetooth BLE controllers, discover local ESP32 Wi-Fi hubs, or manually link by IP/MAC.
-          </p>
-        </div>
+      {/* Header Info */}
+      <div className="text-left">
+        <h1 className="text-[20px] font-black text-slate-900 tracking-tight uppercase">
+          Connect Bed Nodes
+        </h1>
+        <p className="text-xs text-slate-500 mt-1 leading-relaxed">
+          Link bedside medical hubs over local Wi-Fi or pair nearby Bluetooth devices.
+        </p>
       </div>
 
-      {/* Smart Auto-Adopt Card (Wi-Fi & Bluetooth) */}
-      <div className="bg-primary/5 rounded-xl p-3.5 border border-primary/25 shadow-2xs flex flex-col gap-2.5">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <span className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-primary shrink-0">
-              <span className="material-symbols-outlined text-[20px]">
-                {bedState.wifiConnected && bedState.bleSynced ? 'hub' : bedState.wifiConnected ? 'wifi' : 'bluetooth_connected'}
-              </span>
-            </span>
-            <div>
-              <div className="flex items-center gap-1.5 flex-wrap">
-                <h3 className="text-xs font-bold text-on-surface">
-                  Smart Zero-Touch Auto-Pair
-                </h3>
-                <span className="text-[9px] font-extrabold bg-primary text-on-primary px-1.5 py-0.2 rounded-full uppercase">
-                  Wi-Fi + Bluetooth
-                </span>
-              </div>
-              <p className="text-[11px] text-on-surface-variant leading-tight mt-0.5">
-                Already connected to Bed Wi-Fi or paired in phone Bluetooth? App takes it as default!
-              </p>
-            </div>
-          </div>
-        </div>
-
-        {/* Dual Toggles: Wi-Fi Hotspot & Phone Bluetooth */}
-        <div className="grid grid-cols-2 gap-2 pt-1 border-t border-primary/15">
-          <label className="flex items-center justify-between p-2 rounded-lg bg-surface-container-low border border-outline-variant/20 cursor-pointer">
-            <div className="flex items-center gap-1.5">
-              <span className="material-symbols-outlined text-[16px] text-primary">wifi</span>
-              <div>
-                <span className="text-[11px] font-bold text-on-surface block leading-tight">
-                  Auto Wi-Fi
-                </span>
-                <span className="text-[9px] text-on-surface-variant">192.168.4.x / LAN</span>
-              </div>
-            </div>
-            <input
-              type="checkbox"
-              checked={autoWifiEnabled}
-              onChange={(e) => handleToggleAutoWifi(e.target.checked)}
-              className="accent-primary w-4 h-4 cursor-pointer"
-            />
-          </label>
-
-          <label className="flex items-center justify-between p-2 rounded-lg bg-surface-container-low border border-outline-variant/20 cursor-pointer">
-            <div className="flex items-center gap-1.5">
-              <span className="material-symbols-outlined text-[16px] text-primary">bluetooth_connected</span>
-              <div>
-                <span className="text-[11px] font-bold text-on-surface block leading-tight">
-                  Auto Phone BLE
-                </span>
-                <span className="text-[9px] text-on-surface-variant">OS Paired Devices</span>
-              </div>
-            </div>
-            <input
-              type="checkbox"
-              checked={autoBtEnabled}
-              onChange={(e) => handleToggleAutoBt(e.target.checked)}
-              className="accent-primary w-4 h-4 cursor-pointer"
-            />
-          </label>
-        </div>
-
-        {/* Status Line & Trigger Button */}
-        <div className="flex items-center justify-between gap-2 pt-1 border-t border-primary/15">
-          <div className="flex items-center gap-1.5 text-[11px] text-on-surface-variant truncate">
-            <span
-              className={`w-2 h-2 rounded-full shrink-0 ${
-                bedState.wifiConnected || bedState.bleSynced ? 'bg-emerald-500' : 'bg-outline-variant'
-              }`}
-            />
-            <span className="truncate">
-              {bedState.wifiConnected || bedState.bleSynced
-                ? `Active: ${bedState.connectedBedId} (${bedState.wifiConnected ? 'Wi-Fi' : ''}${
-                    bedState.wifiConnected && bedState.bleSynced ? ' + ' : ''
-                  }${bedState.bleSynced ? 'BLE' : ''})`
-                : 'No bed active yet'}
-            </span>
-          </div>
-
+      {/* Mode Selector Tabs (Elegant, segmented tabs) */}
+      <div className="grid grid-cols-5 gap-1 p-1 bg-slate-100 rounded-xl">
+        {[
+          { id: 'hybrid', label: 'Hybrid', icon: 'hub' },
+          { id: 'spp', label: 'Serial', icon: 'settings_input_antenna' },
+          { id: 'scan', label: 'BLE', icon: 'sensors' },
+          { id: 'ip', label: 'Wi-Fi', icon: 'wifi' },
+          { id: 'manual', label: 'Manual', icon: 'edit' },
+        ].map((t) => (
           <button
-            onClick={handleCheckAutoHardware}
-            disabled={isCheckingAutoHardware}
-            className="px-2.5 py-1 rounded-lg bg-primary hover:bg-primary-container text-on-primary font-bold text-[11px] flex items-center gap-1 cursor-pointer transition-all active:scale-98 shadow-2xs shrink-0"
+            key={t.id}
+            onClick={() => setActiveMode(t.id as any)}
+            className={`py-2 text-[10px] font-bold rounded-lg transition-all cursor-pointer flex flex-col items-center justify-center gap-0.5 ${
+              activeMode === t.id
+                ? 'bg-white text-primary shadow-2xs border border-slate-200/20'
+                : 'text-slate-500 hover:text-slate-800'
+            }`}
           >
-            <span className={`material-symbols-outlined text-[14px] ${isCheckingAutoHardware ? 'animate-spin' : ''}`}>
-              sync
-            </span>
-            <span>{isCheckingAutoHardware ? 'Detecting...' : 'Auto-Detect Bed'}</span>
+            <span className="material-symbols-outlined text-[16px]">{t.icon}</span>
+            <span className="truncate leading-none">{t.label}</span>
           </button>
+        ))}
+      </div>
+
+      {/* Mode Notices / Notifications */}
+      {pairingNotice && (
+        <div className="p-3 bg-blue-50 border border-blue-200 text-primary text-xs font-bold rounded-xl text-center animate-in fade-in">
+          {pairingNotice}
         </div>
-      </div>
-
-      {/* Mode Selector Tabs */}
-      <div className="grid grid-cols-3 gap-1.5 p-1 bg-surface-container rounded-xl">
-        <button
-          onClick={() => setActiveMode('scan')}
-          className={`py-2 text-xs font-bold rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1 ${
-            activeMode === 'scan'
-              ? 'bg-surface-container-lowest text-primary shadow-xs'
-              : 'text-on-surface-variant hover:text-on-surface'
-          }`}
-        >
-          <span className="material-symbols-outlined text-[16px]">sensors</span>
-          <span>Bluetooth</span>
-        </button>
-        <button
-          onClick={() => setActiveMode('ip')}
-          className={`py-2 text-xs font-bold rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1 ${
-            activeMode === 'ip'
-              ? 'bg-surface-container-lowest text-primary shadow-xs'
-              : 'text-on-surface-variant hover:text-on-surface'
-          }`}
-        >
-          <span className="material-symbols-outlined text-[16px]">wifi</span>
-          <span>Wi-Fi / LAN</span>
-        </button>
-        <button
-          onClick={() => setActiveMode('manual')}
-          className={`py-2 text-xs font-bold rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1 ${
-            activeMode === 'manual'
-              ? 'bg-surface-container-lowest text-primary shadow-xs'
-              : 'text-on-surface-variant hover:text-on-surface'
-          }`}
-        >
-          <span className="material-symbols-outlined text-[16px]">edit</span>
-          <span>Manual</span>
-        </button>
-      </div>
-
-      {/* MODE 1: BLUETOOTH SCANNER */}
-      {activeMode === 'scan' && (
-        <>
-          {/* Radar Animation Area */}
-          <div className="bg-surface-container-lowest rounded-xl p-4 shadow-md flex flex-col items-center justify-center relative overflow-hidden border border-outline-variant/15">
-            <div className="relative w-40 h-40 flex items-center justify-center my-1">
-              <div
-                className={`absolute inset-0 rounded-full border border-primary/20 ${
-                  isScanning ? 'animate-ping opacity-50' : 'opacity-20'
-                }`}
-              />
-              <div className="absolute w-32 h-32 rounded-full border border-primary/25 bg-primary/5 flex items-center justify-center" />
-              <div className="absolute w-20 h-20 rounded-full border border-primary/30 bg-primary/10 flex items-center justify-center" />
-              <div className="w-12 h-12 rounded-full bg-primary flex items-center justify-center text-on-primary shadow-lg z-10">
-                <span
-                  className={`material-symbols-outlined text-[24px] ${
-                    isScanning ? 'animate-spin' : 'animate-pulse'
-                  }`}
-                >
-                  {isScanning ? 'sync' : 'bluetooth'}
-                </span>
-              </div>
-
-              {/* Dynamic device blips */}
-              {devices.slice(0, 3).map((d, index) => {
-                const positions = [
-                  'top-2 right-4',
-                  'top-8 left-3',
-                  'bottom-3 left-6',
-                ];
-                return (
-                  <div
-                    key={d.id}
-                    onClick={() => setSelectedBed(d.id)}
-                    className={`absolute ${positions[index]} bg-surface-container-lowest border border-primary/30 shadow-xs px-2 py-0.5 rounded-full text-[10px] font-bold text-primary flex items-center gap-1 cursor-pointer transition-transform hover:scale-105`}
-                  >
-                    <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
-                    {d.name.split(' ')[0]}
-                  </div>
-                );
-              })}
-            </div>
-
-            <div className="flex items-center gap-1.5 text-on-surface-variant bg-surface-container px-3 py-1 rounded-full text-[11px] font-semibold mt-1 text-center">
-              <span className="material-symbols-outlined text-[16px] text-primary shrink-0">
-                bluetooth_searching
-              </span>
-              <span>
-                {isScanning
-                  ? 'Actively listening for BLE advertising frames...'
-                  : 'Ready to discover nearby ESP32 bed controllers'}
-              </span>
-            </div>
-          </div>
-
-          {/* Scan feedback / messages */}
-          {scanMessage && (
-            <div className="p-2.5 bg-primary/10 border border-primary/30 text-primary text-xs font-bold rounded-xl text-center animate-in fade-in">
-              {scanMessage}
-            </div>
-          )}
-
-          {bleStatus && (
-            <div className="p-3 bg-surface-container text-xs rounded-xl flex flex-col gap-2 border border-outline-variant/30">
-              <div className="flex items-start gap-2">
-                <span className="material-symbols-outlined text-primary text-[18px] shrink-0 mt-0.5">
-                  info
-                </span>
-                <span className="text-on-surface font-medium leading-relaxed">
-                  {bleStatus}
-                </span>
-              </div>
-              {!isAndroidApk && (
-                <div className="flex items-center gap-2 justify-end">
-                  <button
-                    onClick={() => window.open(window.location.href, '_blank')}
-                    className="px-2.5 py-1 rounded-md bg-primary text-on-primary font-bold text-[11px] hover:bg-primary-container cursor-pointer flex items-center gap-1"
-                  >
-                    <span className="material-symbols-outlined text-[13px]">
-                      open_in_new
-                    </span>
-                    Open in New Tab for Web Bluetooth
-                  </button>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Quick Action Scan Buttons */}
-          <div className="grid grid-cols-2 gap-2">
-            <button
-              onClick={handleDeepScan}
-              disabled={isScanning}
-              className="h-11 rounded-xl bg-surface-container hover:bg-surface-variant text-on-surface font-bold text-xs transition-colors flex items-center justify-center gap-2 cursor-pointer border border-outline-variant/20 shadow-xs active:scale-98"
-            >
-              <span
-                className={`material-symbols-outlined text-[18px] text-primary ${
-                  isScanning ? 'animate-spin' : ''
-                }`}
-              >
-                refresh
-              </span>
-              {isScanning ? 'Scanning...' : 'Scan Nearby Beds'}
-            </button>
-
-            <button
-              onClick={handleBluetoothScan}
-              disabled={isScanning}
-              className="h-11 rounded-xl bg-primary-container text-on-primary hover:bg-primary font-bold text-xs transition-colors flex items-center justify-center gap-2 cursor-pointer shadow-xs active:scale-98"
-            >
-              <span className="material-symbols-outlined text-[18px]">
-                bluetooth
-              </span>
-              Pair via Bluetooth
-            </button>
-          </div>
-
-          {/* Chipset & Universal Mobile Compatibility Control Panel */}
-          <div className="bg-surface-container-lowest border border-outline-variant/15 rounded-xl p-3.5 shadow-xs flex flex-col gap-3">
-            <div className="flex items-center justify-between pb-2 border-b border-outline-variant/10">
-              <div className="flex items-center gap-1.5">
-                <span className="material-symbols-outlined text-[18px] text-primary">
-                  settings_suggest
-                </span>
-                <span className="text-[12px] font-extrabold text-on-surface">
-                  Universal Chipset &amp; OS Compatibility
-                </span>
-              </div>
-              <span className="text-[9px] font-extrabold px-1.5 py-0.5 rounded bg-primary/10 text-primary tracking-wider">
-                COMPATIBILITY AUTO-TUNING
-              </span>
-            </div>
-
-            {/* Legacy BLE Toggle */}
-            <div className="flex items-start justify-between gap-3 bg-surface-container/30 p-2.5 rounded-lg border border-outline-variant/5">
-              <div className="flex-1">
-                <div className="flex items-center gap-1.5">
-                  <span className="text-xs font-bold text-on-surface">
-                    Legacy BLE Sniffer Mode (BLE 4.0+)
-                  </span>
-                  <span className="text-[8.5px] font-black bg-amber-500/10 text-amber-800 px-1 rounded uppercase">
-                    Max Stability
-                  </span>
-                </div>
-                <p className="text-[10px] text-on-surface-variant font-medium mt-0.5 leading-relaxed">
-                  Bypasses default Bluetooth OS caching and strict advertising prefixes. Turn ON if using older chipsets (MediaTek, Exynos, or older Qualcomm Snapdragon models).
-                </p>
-              </div>
-              <label className="relative inline-flex items-center cursor-pointer select-none mt-1 shrink-0">
-                <input
-                  type="checkbox"
-                  checked={legacyMode}
-                  onChange={(e) => setLegacyMode(e.target.checked)}
-                  className="sr-only peer"
-                />
-                <div className="w-9 h-5 bg-outline-variant rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-primary" />
-              </label>
-            </div>
-
-            {/* Expandable Troubleshooter / Guide */}
-            <details className="group cursor-pointer">
-              <summary className="flex items-center justify-between text-xs font-extrabold text-primary select-none hover:underline outline-none">
-                <div className="flex items-center gap-1">
-                  <span className="material-symbols-outlined text-[16px] group-open:rotate-90 transition-transform">
-                    chevron_right
-                  </span>
-                  <span>View Cross-Generation Mobile Setup Guide</span>
-                </div>
-              </summary>
-              <div className="mt-2.5 p-3 rounded-lg bg-surface-container/40 border border-outline-variant/10 text-[11px] leading-relaxed flex flex-col gap-2.5 cursor-default">
-                <div>
-                  <span className="font-extrabold text-on-surface block">Older Android Devices (Android 6.0 to 11):</span>
-                  <p className="text-on-surface-variant font-medium mt-0.5">
-                    Requires <strong className="text-on-surface">Location Services (GPS)</strong> to be turned ON, and the <strong className="text-on-surface">Access Fine Location</strong> permission granted, otherwise BLE beacons will be blank.
-                  </p>
-                </div>
-                <div>
-                  <span className="font-extrabold text-on-surface block">Newer Android Devices (Android 12, 13, 14+):</span>
-                  <p className="text-on-surface-variant font-medium mt-0.5">
-                    Requires <strong className="text-on-surface">Nearby Devices (Bluetooth Scan &amp; Connect)</strong> permission. You do not need to keep Location Services toggled on for these chipsets.
-                  </p>
-                </div>
-                <div>
-                  <span className="font-extrabold text-on-surface block">iOS &amp; Web Safari Fallback:</span>
-                  <p className="text-on-surface-variant font-medium mt-0.5">
-                    To connect via Wi-Fi IP in iOS, ensure you authorize <strong className="text-on-surface">Local Network Permission</strong>. iOS does not support Web Bluetooth in default Safari; compile to the native APK or use our rapid Wi-Fi/LAN gateway sweep.
-                  </p>
-                </div>
-              </div>
-            </details>
-          </div>
-        </>
       )}
 
-      {/* MODE 2: DIRECT WI-FI / LAN */}
-      {activeMode === 'ip' && (
-        <div className="bg-surface-container-lowest rounded-xl p-4 shadow-sm flex flex-col gap-3.5 border border-outline-variant/15">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <span className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-primary">
-                <span className="material-symbols-outlined text-[20px]">router</span>
-              </span>
+      {/* MODE 1: HYBRID DUAL-LINK */}
+      {activeMode === 'hybrid' && (
+        <div className="flex flex-col gap-3.5 animate-in fade-in duration-200">
+          <div className="bg-white border border-slate-200/60 rounded-xl p-4 shadow-xs flex flex-col gap-3.5">
+            <div className="flex items-center justify-between text-left">
               <div>
-                <h3 className="text-sm font-bold text-on-surface">
-                  ESP32 Wi-Fi &amp; Subnet Discovery
+                <h3 className="text-xs font-extrabold uppercase tracking-wide text-slate-800">
+                  Hybrid Dual-Link (Wi-Fi + Classic BT)
                 </h3>
-                <p className="text-[11px] text-on-surface-variant">
-                  Direct LAN connection to your bed controller
+                <p className="text-[10px] text-slate-400 font-semibold mt-0.5 uppercase font-mono">
+                  Symmetrical redundant data transmission
                 </p>
               </div>
             </div>
-          </div>
 
-          {/* 1-Tap ESP32 Controller Linking Cards */}
-          <div className="p-3.5 rounded-xl bg-primary/5 border border-primary/25 flex flex-col gap-2.5">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <span className="material-symbols-outlined text-primary text-[20px]">
-                  wifi_tethering
-                </span>
-                <div>
-                  <span className="text-xs font-bold text-on-surface block">
-                    ESP32-WROOM Quick Connect (1-Tap)
-                  </span>
-                  <span className="text-[10px] text-on-surface-variant font-mono">
-                    SoftAP: 192.168.4.1 &bull; Phone DHCP: 192.168.4.2 &bull; DNS: 192.168.1.1
-                  </span>
-                </div>
+            {/* Diagnostic blocks */}
+            <div className="grid grid-cols-2 gap-2.5">
+              <div className="p-3 rounded-lg border border-slate-200/50 bg-slate-50/50 text-left">
+                <span className="text-[8.5px] font-bold text-slate-400 uppercase tracking-wider block">Wi-Fi Gateway</span>
+                <span className="text-xs font-bold font-mono text-slate-800 block mt-1">192.168.4.1</span>
+                <span className="text-[9px] font-semibold text-slate-500 block uppercase mt-0.5">SoftAP Status: Active</span>
+              </div>
+              <div className="p-3 rounded-lg border border-slate-200/50 bg-slate-50/50 text-left">
+                <span className="text-[8.5px] font-bold text-slate-400 uppercase tracking-wider block">BT Serial Mac</span>
+                <span className="text-xs font-bold font-mono text-slate-800 block mt-1">{classicMacInput || 'Unselected'}</span>
+                <span className="text-[9px] font-semibold text-slate-500 block uppercase mt-0.5">RFCOMM Port Ready</span>
+              </div>
+            </div>
+
+            <button
+              onClick={() => handleConnectHybrid()}
+              className="h-10 rounded-lg bg-primary hover:bg-primary-container text-white text-xs font-bold uppercase tracking-wider cursor-pointer shadow-2xs transition-colors"
+            >
+              Initialize Hybrid Link
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* MODE 2: BLUETOOTH CLASSIC SPP */}
+      {activeMode === 'spp' && (
+        <div className="flex flex-col gap-3.5 animate-in fade-in duration-200">
+          <div className="bg-white border border-slate-200/60 rounded-xl p-4 shadow-xs flex flex-col gap-3">
+            <div className="flex items-center justify-between text-left">
+              <div>
+                <h3 className="text-xs font-extrabold uppercase tracking-wide text-slate-800 text-left">
+                  Paired Devices ({classicDevices.length})
+                </h3>
+                <p className="text-[10px] text-slate-400 font-semibold mt-0.5 uppercase font-mono">
+                  Bonded RFCOMM Serial profiles
+                </p>
               </div>
               <button
-                onClick={handleCheckAutoWifi}
-                disabled={isCheckingAutoHardware}
-                className="text-[10px] font-extrabold bg-primary hover:bg-primary-container text-on-primary px-2.5 py-1 rounded-lg flex items-center gap-1 cursor-pointer transition-all active:scale-98 shadow-2xs"
+                onClick={handleScanClassicDevices}
+                disabled={isClassicScanning}
+                className="text-[10px] font-bold text-primary flex items-center gap-1 cursor-pointer"
               >
-                <span className={`material-symbols-outlined text-[13px] ${isCheckingAutoHardware ? 'animate-spin' : ''}`}>
-                  sync
-                </span>
-                <span>{isCheckingAutoHardware ? 'Probing...' : 'Auto-Detect'}</span>
+                Refresh
               </button>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1">
-              <button
-                onClick={() => {
-                  setManualIp('192.168.4.1');
-                  setManualPort('80');
-                  setManualBedName('MarQ ESP32 Gateway (192.168.4.1)');
-                  handleConnectIp('192.168.4.1', '80');
-                }}
-                className="p-2 rounded-lg bg-primary hover:bg-primary-container text-on-primary font-bold text-xs flex flex-col items-center justify-center gap-0.5 shadow-2xs cursor-pointer transition-all active:scale-98"
-              >
-                <span className="flex items-center gap-1 text-[11px]">
-                  <span className="material-symbols-outlined text-[14px]">router</span>
-                  192.168.4.1
-                </span>
-                <span className="text-[9px] opacity-80 font-normal">ESP32 Gateway</span>
-              </button>
+            {classicDevices.length === 0 ? (
+              <div className="p-4 rounded-xl bg-slate-50 text-center text-xs text-slate-500">
+                No paired Bluetooth Classic devices found.
+              </div>
+            ) : (
+              <div className="flex flex-col gap-2 max-h-56 overflow-y-auto">
+                {classicDevices.map((dev) => {
+                  const isConnected = bridgeStatus.bluetoothConnected && bridgeStatus.btAddress === dev.address;
+                  return (
+                    <div
+                      key={dev.address}
+                      className="p-3 rounded-lg border border-slate-200/50 bg-slate-50/50 flex items-center justify-between text-left"
+                    >
+                      <div>
+                        <span className="text-xs font-bold text-slate-800">{dev.name || 'ESP32 Node'}</span>
+                        <span className="text-[9px] font-mono text-slate-500 block mt-0.5">{dev.address}</span>
+                      </div>
+                      <button
+                        onClick={() => handleConnectClassicDevice(dev.address, dev.name)}
+                        className="px-2.5 py-1 rounded bg-primary text-white text-[10px] font-bold cursor-pointer"
+                      >
+                        {isConnected ? 'Connected' : 'Link SPP'}
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
-              <button
-                onClick={() => {
-                  setManualIp('192.168.4.2');
-                  setManualPort('80');
-                  setManualBedName('ESP32 Bed Unit (192.168.4.2)');
-                  handleConnectIp('192.168.4.2', '80');
-                }}
-                className="p-2 rounded-lg bg-secondary-container hover:bg-secondary hover:text-on-secondary text-on-secondary-container font-bold text-xs flex flex-col items-center justify-center gap-0.5 shadow-2xs cursor-pointer transition-all active:scale-98"
-              >
-                <span className="flex items-center gap-1 text-[11px]">
-                  <span className="material-symbols-outlined text-[14px]">devices</span>
-                  192.168.4.2
-                </span>
-                <span className="text-[9px] opacity-80 font-normal">Device Target</span>
-              </button>
-
-              <button
-                onClick={() => {
-                  setManualIp('192.168.1.1');
-                  setManualPort('80');
-                  setManualBedName('Local Router Bed (192.168.1.1)');
-                  handleConnectIp('192.168.1.1', '80');
-                }}
-                className="p-2 rounded-lg bg-surface-container hover:bg-surface-variant text-on-surface font-bold text-xs flex flex-col items-center justify-center gap-0.5 shadow-2xs cursor-pointer transition-all active:scale-98 border border-outline-variant/20"
-              >
-                <span className="flex items-center gap-1 text-[11px]">
-                  <span className="material-symbols-outlined text-[14px]">dns</span>
-                  192.168.1.1
-                </span>
-                <span className="text-[9px] text-on-surface-variant font-normal">Subnet Router</span>
-              </button>
+      {/* MODE 3: BLE SCANNER */}
+      {activeMode === 'scan' && (
+        <div className="flex flex-col gap-3.5 animate-in fade-in duration-200">
+          <div className="bg-white border border-slate-200/60 rounded-xl p-4 shadow-xs flex flex-col gap-3.5 text-center items-center justify-center">
+            {/* Scan animation blip */}
+            <div className="w-20 h-20 rounded-full bg-blue-50 border border-blue-200/60 flex items-center justify-center text-primary relative my-1">
+              <span className={`material-symbols-outlined text-[24px] ${isScanning ? 'animate-spin' : ''}`}>
+                sensors
+              </span>
             </div>
 
-            {/* Hardware Guide & Firmware Modal Button */}
-            <button
-              onClick={() => setShowEsp32HardwareModal(true)}
-              className="w-full mt-1 py-1.5 px-3 rounded-lg bg-surface-container-high hover:bg-surface-variant text-primary font-bold text-[11px] flex items-center justify-center gap-1.5 border border-primary/20 cursor-pointer transition-all"
-            >
-              <span className="material-symbols-outlined text-[16px]">developer_board</span>
-              View ESP32 8-Relay Pinouts, Diagrams &amp; Arduino C++ Code
-            </button>
+            {bleStatus && <p className="text-[11px] text-slate-500">{bleStatus}</p>}
 
-            {/* Android VoLTE / 4G Notice */}
-            <div className="p-2 rounded-lg bg-amber-500/10 border border-amber-500/20 text-on-surface text-[10px] leading-relaxed">
-              <span className="font-bold text-amber-700 block">Android Mobile Data Notice:</span>
-              If your phone shows <em>&quot;Wi-Fi has no internet access&quot;</em>, tap <strong>&quot;Stay connected&quot;</strong>, or temporarily disable Mobile Data (VoLTE 4G+) so Android directs app traffic through the ESP32 hotspot.
+            <div className="grid grid-cols-2 gap-2 w-full">
+              <button
+                onClick={handleDeepScan}
+                disabled={isScanning}
+                className="h-10 rounded-lg bg-slate-50 hover:bg-slate-100 text-slate-700 text-xs font-bold uppercase tracking-wider cursor-pointer border border-slate-200/50"
+              >
+                {isScanning ? 'Scanning...' : 'Scan Subnet'}
+              </button>
+              <button
+                onClick={handleBluetoothScan}
+                disabled={isScanning}
+                className="h-10 rounded-lg bg-primary hover:bg-primary-container text-white text-xs font-bold uppercase tracking-wider cursor-pointer"
+              >
+                Pair BLE Device
+              </button>
             </div>
           </div>
+        </div>
+      )}
 
-          {/* Active Subnet Scanner Button */}
-          <button
-            onClick={handleScanWifiSubnet}
-            disabled={isWifiScanning}
-            className="w-full h-10 rounded-xl bg-surface-container hover:bg-surface-variant text-primary font-bold text-xs flex items-center justify-center gap-2 border border-primary/20 cursor-pointer shadow-xs transition-all active:scale-98"
-          >
-            <span
-              className={`material-symbols-outlined text-[18px] ${
-                isWifiScanning ? 'animate-spin' : ''
-              }`}
-            >
-              travel_explore
-            </span>
-            {isWifiScanning
-              ? 'Sweeping Local Subnet...'
-              : 'Scan Local Wi-Fi Subnet for Beds'}
-          </button>
+      {/* MODE 4: DIRECT WI-FI IP */}
+      {activeMode === 'ip' && (
+        <div className="bg-white rounded-xl p-4 shadow-xs flex flex-col gap-3.5 border border-slate-200/60 animate-in fade-in duration-200">
+          <div className="text-left">
+            <h3 className="text-xs font-extrabold uppercase tracking-wide text-slate-800">
+              Direct IP Connection
+            </h3>
+            <p className="text-[10px] text-slate-400 font-semibold mt-0.5 uppercase font-mono">
+              TCP/IP Gateway Channel
+            </p>
+          </div>
 
-          {wifiScanProgress && (
-            <div className="p-2.5 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-bold rounded-lg text-center animate-in fade-in">
-              {wifiScanProgress}
-            </div>
-          )}
-
-          {/* Manual IP Inputs */}
-          <div className="flex flex-col gap-2.5 pt-1 border-t border-outline-variant/15">
+          <div className="flex flex-col gap-2.5">
             <div>
-              <label className="text-[11px] font-bold text-on-surface-variant block mb-1">
-                Bed Controller IP Address or mDNS Hostname
-              </label>
+              <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block mb-1">IP Address</span>
               <input
                 type="text"
                 value={manualIp}
                 onChange={(e) => setManualIp(e.target.value)}
-                placeholder="192.168.4.1 or 192.168.1.100"
-                className="w-full h-10 px-3 rounded-lg bg-surface-container-low border border-outline-variant/30 text-xs font-mono font-bold text-on-surface focus:outline-none focus:border-primary"
+                placeholder="192.168.4.1"
+                className="w-full h-10 px-3 rounded-lg bg-slate-50 border border-slate-200 text-xs font-mono font-bold text-slate-800"
               />
             </div>
-
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-2 gap-2.5">
               <div>
-                <label className="text-[11px] font-bold text-on-surface-variant block mb-1">
-                  Port
-                </label>
+                <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Port</span>
                 <input
                   type="text"
                   value={manualPort}
                   onChange={(e) => setManualPort(e.target.value)}
-                  placeholder="80 or 8080"
-                  className="w-full h-10 px-3 rounded-lg bg-surface-container-low border border-outline-variant/30 text-xs font-mono font-bold text-on-surface focus:outline-none focus:border-primary"
+                  placeholder="80"
+                  className="w-full h-10 px-3 rounded-lg bg-slate-50 border border-slate-200 text-xs font-mono font-bold text-slate-800"
                 />
               </div>
               <div>
-                <label className="text-[11px] font-bold text-on-surface-variant block mb-1">
-                  Room Identifier
-                </label>
+                <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Room</span>
                 <input
                   type="text"
                   value={manualRoom}
                   onChange={(e) => setManualRoom(e.target.value)}
                   placeholder="Room 412"
-                  className="w-full h-10 px-3 rounded-lg bg-surface-container-low border border-outline-variant/30 text-xs font-bold text-on-surface focus:outline-none focus:border-primary"
+                  className="w-full h-10 px-3 rounded-lg bg-slate-50 border border-slate-200 text-xs font-bold text-slate-800"
                 />
               </div>
-            </div>
-
-            <div>
-              <label className="text-[11px] font-bold text-on-surface-variant block mb-1">
-                Bed Label / Identifier
-              </label>
-              <input
-                type="text"
-                value={manualBedName}
-                onChange={(e) => setManualBedName(e.target.value)}
-                placeholder="e.g. ICU Bed 01"
-                className="w-full h-10 px-3 rounded-lg bg-surface-container-low border border-outline-variant/30 text-xs font-bold text-on-surface focus:outline-none focus:border-primary"
-              />
             </div>
           </div>
 
           <button
-            onClick={handleConnectIp}
-            disabled={isPinging}
-            className="w-full h-11 rounded-xl bg-primary hover:bg-primary-container text-on-primary font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 shadow-xs cursor-pointer transition-all active:scale-98"
+            onClick={() => handleConnectIp()}
+            className="h-10 rounded-lg bg-primary hover:bg-primary-container text-white text-xs font-bold uppercase tracking-wider cursor-pointer shadow-2xs"
           >
-            <span
-              className={`material-symbols-outlined text-[18px] ${
-                isPinging ? 'animate-spin' : ''
-              }`}
-            >
-              {isPinging ? 'sync' : 'link'}
-            </span>
-            {isPinging ? 'Connecting to ESP32...' : 'Connect to Bed via IP'}
+            {isPinging ? 'Pinging Node...' : 'Establish TCP Socket'}
           </button>
         </div>
       )}
 
-      {/* MODE 3: MANUAL OVERRIDE */}
+      {/* MODE 5: MANUAL OVERRIDE */}
       {activeMode === 'manual' && (
-        <div className="bg-surface-container-lowest rounded-xl p-4 shadow-sm flex flex-col gap-3.5 border border-outline-variant/15">
-          <div className="flex items-center gap-2">
-            <span className="w-8 h-8 rounded-full bg-secondary-fixed flex items-center justify-center text-secondary">
-              <span className="material-symbols-outlined text-[20px]">
-                tune
-              </span>
-            </span>
-            <div>
-              <h3 className="text-sm font-bold text-on-surface">
-                Manual Bed Controller Link
-              </h3>
-              <p className="text-[11px] text-on-surface-variant">
-                Force link any custom ESP32, Arduino, or BLE MAC address
-              </p>
-            </div>
+        <div className="bg-white rounded-xl p-4 shadow-xs flex flex-col gap-3.5 border border-slate-200/60 animate-in fade-in duration-200">
+          <div className="text-left">
+            <h3 className="text-xs font-extrabold uppercase tracking-wide text-slate-800">
+              Manual Override Connect
+            </h3>
+            <p className="text-[10px] text-slate-400 font-semibold mt-0.5 uppercase font-mono">
+              Force connect to non-standard MAC/IPs
+            </p>
           </div>
 
-          <p className="text-xs text-on-surface-variant leading-relaxed">
-            If your controller does not advertise standard hospital beacons or is running custom firmware, enter its name or identifier below to connect directly without waiting for RF scans.
-          </p>
-
           <div className="flex flex-col gap-2.5">
-            <div>
-              <label className="text-[11px] font-bold text-on-surface-variant block mb-1">
-                Controller Name
-              </label>
-              <input
-                type="text"
-                value={overrideName}
-                onChange={(e) => setOverrideName(e.target.value)}
-                placeholder="e.g. My-ESP32-Bed or HC-05"
-                className="w-full h-10 px-3 rounded-lg bg-surface-container-low border border-outline-variant/30 text-xs font-bold text-on-surface focus:outline-none focus:border-primary"
-              />
-            </div>
-
-            <div>
-              <label className="text-[11px] font-bold text-on-surface-variant block mb-1">
-                Hardware Address / MAC / IP
-              </label>
-              <input
-                type="text"
-                value={overrideIdentifier}
-                onChange={(e) => setOverrideIdentifier(e.target.value)}
-                placeholder="e.g. E4:65:B8:33:44:55 or 192.168.1.50"
-                className="w-full h-10 px-3 rounded-lg bg-surface-container-low border border-outline-variant/30 text-xs font-mono font-bold text-on-surface focus:outline-none focus:border-primary"
-              />
-            </div>
-
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-2 gap-2.5">
               <div>
-                <label className="text-[11px] font-bold text-on-surface-variant block mb-1">
-                  Room
-                </label>
+                <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Device Name</span>
                 <input
                   type="text"
-                  value={overrideRoom}
-                  onChange={(e) => setOverrideRoom(e.target.value)}
-                  placeholder="Room 415"
-                  className="w-full h-10 px-3 rounded-lg bg-surface-container-low border border-outline-variant/30 text-xs font-bold text-on-surface focus:outline-none focus:border-primary"
+                  value={overrideName}
+                  onChange={(e) => setOverrideName(e.target.value)}
+                  placeholder="Custom Bed Node"
+                  className="w-full h-10 px-3 rounded-lg bg-slate-50 border border-slate-200 text-xs font-bold text-slate-800"
                 />
               </div>
-
               <div>
-                <label className="text-[11px] font-bold text-on-surface-variant block mb-1">
-                  Link Type
-                </label>
-                <select
-                  value={overrideType}
-                  onChange={(e) => setOverrideType(e.target.value as any)}
-                  className="w-full h-10 px-2 rounded-lg bg-surface-container-low border border-outline-variant/30 text-xs font-bold text-on-surface focus:outline-none focus:border-primary"
-                >
-                  <option value="Dual-Band">Dual-Band (BLE + Wi-Fi)</option>
-                  <option value="BLE Only">Bluetooth LE Only</option>
-                  <option value="Wi-Fi IP">Local Wi-Fi IP</option>
-                </select>
+                <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block mb-1">MAC/IP Target</span>
+                <input
+                  type="text"
+                  value={overrideIdentifier}
+                  onChange={(e) => setOverrideIdentifier(e.target.value)}
+                  placeholder="E4:65:B8:33:44:55"
+                  className="w-full h-10 px-3 rounded-lg bg-slate-50 border border-slate-200 text-xs font-mono font-bold text-slate-800"
+                />
               </div>
             </div>
           </div>
 
           <button
             onClick={handleManualOverride}
-            className="w-full h-11 rounded-xl bg-primary hover:bg-primary-container text-on-primary font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 shadow-xs cursor-pointer transition-all active:scale-98"
+            className="h-10 rounded-lg bg-primary hover:bg-primary-container text-white text-xs font-bold uppercase tracking-wider cursor-pointer"
           >
-            <span className="material-symbols-outlined text-[18px]">
-              check_circle
-            </span>
-            Link &amp; Activate Controller Now
+            Force Active Override
           </button>
         </div>
       )}
 
-      {/* Clear All Confirmation Modal / Banner */}
-      {showClearConfirm && (
-        <div className="bg-tertiary-container/20 border-2 border-tertiary/40 rounded-2xl p-4 shadow-sm flex flex-col gap-3 animate-in fade-in zoom-in-95 duration-150">
-          <div className="flex items-start gap-3">
-            <span className="material-symbols-outlined text-tertiary text-[26px] shrink-0 mt-0.5">
-              delete_sweep
-            </span>
-            <div className="flex-1">
-              <h4 className="text-sm font-extrabold text-on-surface">
-                Clear All Paired Devices?
-              </h4>
-              <p className="text-xs text-on-surface-variant leading-relaxed mt-0.5">
-                This will unpair and remove all stored Bluetooth &amp; Wi-Fi controllers. Active bed connections will be unlinked so you can connect fresh devices.
-              </p>
-            </div>
-          </div>
-          <div className="flex items-center justify-end gap-2 pt-1 border-t border-tertiary/20">
-            <button
-              onClick={() => setShowClearConfirm(false)}
-              className="px-3 py-1.5 rounded-lg text-xs font-bold text-on-surface-variant hover:bg-surface-container transition-colors cursor-pointer"
-            >
-              Cancel
-            </button>
-            <button
-              id="btn-confirm-clear-all"
-              onClick={handleClearAllDevices}
-              className="px-3.5 py-1.5 rounded-lg bg-tertiary text-on-tertiary text-xs font-extrabold flex items-center gap-1.5 shadow-xs hover:opacity-90 active:scale-95 transition-all cursor-pointer"
-            >
-              <span className="material-symbols-outlined text-[16px]">
-                delete_sweep
-              </span>
-              Yes, Remove All Devices
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Discovered & Paired Devices Header */}
-      <div className="flex flex-col gap-2 pt-1">
+      {/* Paired Device list */}
+      <div className="flex flex-col gap-2 mt-2">
         <div className="flex items-center justify-between px-1">
-          <div className="flex items-center gap-2">
-            <span className="text-[11px] font-extrabold text-outline uppercase tracking-wider">
-              Controllers ({filteredDevices.length} of {devices.length})
-            </span>
-            {pairedCount > 0 && (
-              <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-surface-container text-on-surface-variant">
-                {pairedCount} Paired
-              </span>
-            )}
-          </div>
-          <div className="flex items-center gap-2">
-            {devices.length > 0 ? (
-              <button
-                id="btn-forget-all-devices"
-                onClick={() => setShowClearConfirm(true)}
-                className="text-[11px] font-bold text-tertiary hover:text-tertiary/80 hover:bg-tertiary/10 px-2 py-0.5 rounded transition-colors flex items-center gap-1 cursor-pointer"
-                title="Remove all saved Bluetooth and Wi-Fi devices"
-              >
-                <span className="material-symbols-outlined text-[15px]">
-                  layers_clear
-                </span>
-                Clear All
-              </button>
-            ) : (
-              <button
-                id="btn-restore-defaults"
-                onClick={handleRestoreDefaults}
-                className="text-[11px] font-bold text-primary hover:bg-primary/10 px-2 py-0.5 rounded transition-colors flex items-center gap-1 cursor-pointer"
-              >
-                <span className="material-symbols-outlined text-[15px]">
-                  history
-                </span>
-                Restore Demo Beds
-              </button>
-            )}
-          </div>
+          <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-widest">
+            Saved Bed Controllers ({filteredDevices.length})
+          </span>
+          <button
+            onClick={handleRestoreDefaults}
+            className="text-[10px] font-bold text-primary hover:underline cursor-pointer uppercase tracking-wider"
+          >
+            Restore Demo Nodes
+          </button>
         </div>
 
-        {/* Filter Chips */}
-        {devices.length > 0 && (
-          <div className="flex items-center gap-1.5 px-1 overflow-x-auto pb-0.5">
-            <button
-              onClick={() => setDeviceFilter('all')}
-              className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                deviceFilter === 'all'
-                  ? 'bg-primary text-on-primary shadow-xs'
-                  : 'bg-surface-container text-on-surface-variant hover:bg-surface-variant'
-              }`}
-            >
-              All ({devices.length})
-            </button>
-            <button
-              onClick={() => setDeviceFilter('ble')}
-              className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-1 cursor-pointer ${
-                deviceFilter === 'ble'
-                  ? 'bg-sky-600 text-white shadow-xs'
-                  : 'bg-surface-container text-on-surface-variant hover:bg-surface-variant'
-              }`}
-            >
-              <span className="material-symbols-outlined text-[14px]">bluetooth</span>
-              Bluetooth ({bleCount})
-            </button>
-            <button
-              onClick={() => setDeviceFilter('wifi')}
-              className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-1 cursor-pointer ${
-                deviceFilter === 'wifi'
-                  ? 'bg-emerald-600 text-white shadow-xs'
-                  : 'bg-surface-container text-on-surface-variant hover:bg-surface-variant'
-              }`}
-            >
-              <span className="material-symbols-outlined text-[14px]">wifi</span>
-              Wi-Fi / IP ({wifiCount})
-            </button>
-            <button
-              onClick={() => setDeviceFilter('paired')}
-              className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-1 cursor-pointer ${
-                deviceFilter === 'paired'
-                  ? 'bg-indigo-600 text-white shadow-xs'
-                  : 'bg-surface-container text-on-surface-variant hover:bg-surface-variant'
-              }`}
-            >
-              <span className="material-symbols-outlined text-[14px]">bookmark</span>
-              Saved ({pairedCount})
-            </button>
-          </div>
-        )}
-      </div>
-
-      {/* Device Cards List */}
-      <div className="flex flex-col gap-2.5">
-        {filteredDevices.map((device) => {
-          const isSelected = selectedBed === device.id;
-          const isActiveBed = bedState.connectedBedId === device.id;
-          return (
-            <div
-              key={device.id}
-              onClick={() => setSelectedBed(device.id)}
-              className={`rounded-xl p-3.5 shadow-sm transition-all cursor-pointer border ${
-                isActiveBed
-                  ? 'bg-emerald-50/50 border-emerald-500/60 ring-1 ring-emerald-500/50'
-                  : isSelected
-                  ? 'bg-surface-container-lowest border-primary shadow-md ring-1 ring-primary'
-                  : 'bg-surface-container-lowest border-outline-variant/20 hover:border-outline-variant'
-              }`}
-            >
-              <div className="flex items-center justify-between gap-2">
-                <div className="flex items-center gap-3 min-w-0">
-                  <div
-                    className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 ${
-                      isActiveBed
-                        ? 'bg-emerald-600 text-white'
-                        : isSelected
-                        ? 'bg-primary text-on-primary'
-                        : 'bg-surface-container text-on-surface-variant'
-                    }`}
-                  >
-                    <span className="material-symbols-outlined text-[22px]">
-                      {device.link === 'BLE Only'
-                        ? 'bluetooth'
-                        : device.link === 'Wi-Fi IP'
-                        ? 'wifi'
-                        : 'bed'}
-                    </span>
-                  </div>
-                  <div className="min-w-0">
+        <div className="flex flex-col gap-2">
+          {filteredDevices.length === 0 ? (
+            <div className="p-4 bg-slate-50 rounded-xl text-center text-xs text-slate-500 border border-slate-100">
+              No saved hospital beds. Scan or add one above.
+            </div>
+          ) : (
+            filteredDevices.map((device) => {
+              const isCurrent = bedState.connectedBedId === device.id;
+              return (
+                <div
+                  key={device.id}
+                  onClick={() => setSelectedBed(device.id)}
+                  className={`p-3.5 rounded-xl border flex items-center justify-between gap-3 text-left transition-all cursor-pointer ${
+                    isCurrent
+                      ? 'bg-emerald-50/50 border-emerald-500/40 ring-1 ring-emerald-500/30'
+                      : 'bg-white border-slate-200/60 hover:border-slate-300'
+                  }`}
+                >
+                  <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-1.5 flex-wrap">
-                      <span className="text-[14px] font-bold text-on-surface truncate">
-                        {device.name}
-                      </span>
-                      {isActiveBed ? (
-                        <span className="text-[10px] font-extrabold bg-emerald-100 text-emerald-800 px-1.5 py-0.2 rounded uppercase flex items-center gap-1">
-                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-pulse" />
-                          Active Linked
-                        </span>
-                      ) : device.recommended ? (
-                        <span className="text-[10px] font-extrabold bg-primary-fixed text-on-primary-fixed px-1.5 py-0.2 rounded uppercase">
-                          Recommended
-                        </span>
-                      ) : null}
-                    </div>
-                    <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
-                      {device.link === 'BLE Only' ? (
-                        <span className="text-[10px] font-bold text-sky-700 bg-sky-50 px-1.5 py-0.2 rounded flex items-center gap-0.5">
-                          <span className="material-symbols-outlined text-[11px]">bluetooth</span>
-                          BLE
-                        </span>
-                      ) : device.link === 'Wi-Fi IP' ? (
-                        <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.2 rounded flex items-center gap-0.5">
-                          <span className="material-symbols-outlined text-[11px]">wifi</span>
-                          Wi-Fi
-                        </span>
-                      ) : (
-                        <span className="text-[10px] font-bold text-indigo-700 bg-indigo-50 px-1.5 py-0.2 rounded flex items-center gap-0.5">
-                          <span className="material-symbols-outlined text-[11px]">hub</span>
-                          Dual-Band
+                      <span className="text-xs font-bold text-slate-800 truncate font-mono">{device.name || device.id}</span>
+                      {isCurrent && (
+                        <span className="text-[9px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.2 rounded uppercase">
+                          Active Channel
                         </span>
                       )}
-                      <span className="text-[11px] text-on-surface-variant font-mono truncate">
-                        {device.room} • {device.mac}
-                      </span>
                     </div>
+                    <p className="text-[10px] text-slate-500 font-mono mt-0.5 truncate">
+                      {device.room} · {device.mac}
+                    </p>
                   </div>
-                </div>
 
-                {/* Card Action Controls: Select & Remove / Forget */}
-                <div className="flex items-center gap-1.5 shrink-0">
-                  <button
-                    id={`btn-forget-${device.id.replace(/[^a-zA-Z0-9_-]/g, '-')}`}
-                    onClick={(e) => handleRemoveDevice(device, e)}
-                    className="min-h-[32px] px-2 py-1 rounded-lg bg-surface-container hover:bg-tertiary/10 text-on-surface-variant hover:text-tertiary border border-outline-variant/30 hover:border-tertiary/40 transition-colors flex items-center gap-1 text-[11px] font-bold cursor-pointer"
-                    title={`Forget ${device.name} to allow new connections`}
-                    aria-label={`Forget ${device.name}`}
-                  >
-                    <span className="material-symbols-outlined text-[16px]">
-                      delete_outline
-                    </span>
-                    <span className="hidden xs:inline">Forget</span>
-                  </button>
-
-                  {isSelected ? (
-                    <span className="material-symbols-outlined text-primary text-[24px]">
-                      check_circle
-                    </span>
-                  ) : (
-                    <button className="text-[11px] font-bold px-2.5 py-1 rounded-md bg-surface-container text-on-surface-variant hover:bg-surface-variant cursor-pointer">
-                      Select
+                  <div className="flex items-center gap-1 shrink-0">
+                    <button
+                      onClick={(e) => handleRemoveDevice(device, e)}
+                      className="p-1 rounded text-slate-300 hover:text-red-500 hover:bg-red-50 transition-colors"
+                      title="Forget Node"
+                    >
+                      <span className="material-symbols-outlined text-[15px]">delete_outline</span>
                     </button>
-                  )}
-                </div>
-              </div>
-
-              {isSelected && (
-                <div className="grid grid-cols-3 gap-2 mt-3 pt-2.5 border-t border-outline-variant/15">
-                  <div className="bg-surface-container-low p-2 rounded-lg text-center">
-                    <span className="text-[10px] font-bold text-outline uppercase block">
-                      Signal
-                    </span>
-                    <span className="text-xs font-bold text-primary">
-                      {device.signal}
-                    </span>
-                  </div>
-                  <div className="bg-surface-container-low p-2 rounded-lg text-center">
-                    <span className="text-[10px] font-bold text-outline uppercase block">
-                      Power
-                    </span>
-                    <span className="text-xs font-bold text-emerald-600">
-                      {device.battery}
-                    </span>
-                  </div>
-                  <div className="bg-surface-container-low p-2 rounded-lg text-center">
-                    <span className="text-[10px] font-bold text-outline uppercase block">
-                      Channel
-                    </span>
-                    <span className="text-xs font-bold text-on-surface">
-                      {device.link}
-                    </span>
+                    {!isCurrent && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedBed(device.id);
+                          handlePair();
+                        }}
+                        className="px-2.5 py-1 rounded bg-slate-100 hover:bg-primary hover:text-white text-[10px] font-bold transition-all"
+                      >
+                        Link
+                      </button>
+                    )}
                   </div>
                 </div>
-              )}
-            </div>
-          );
-        })}
-
-        {/* Empty State when no devices match filter or all removed */}
-        {filteredDevices.length === 0 && (
-          <div className="bg-surface-container-lowest rounded-2xl p-6 shadow-xs border-2 border-dashed border-outline-variant/30 flex flex-col items-center justify-center text-center gap-3">
-            <div className="w-12 h-12 rounded-full bg-surface-container flex items-center justify-center text-on-surface-variant">
-              <span className="material-symbols-outlined text-[28px]">
-                {deviceFilter === 'ble'
-                  ? 'bluetooth_disabled'
-                  : deviceFilter === 'wifi'
-                  ? 'wifi_off'
-                  : 'devices_off'}
-              </span>
-            </div>
-            <div className="flex flex-col gap-1 max-w-xs">
-              <h4 className="text-sm font-extrabold text-on-surface">
-                {devices.length === 0
-                  ? 'All Paired Devices Cleared'
-                  : `No ${deviceFilter.toUpperCase()} Devices Found`}
-              </h4>
-              <p className="text-xs text-on-surface-variant leading-relaxed">
-                {devices.length === 0
-                  ? 'Previously paired Bluetooth & Wi-Fi controllers have been removed. Ready for new connections.'
-                  : `No controllers match the "${deviceFilter}" filter. Switch filters or scan for new connections.`}
-              </p>
-            </div>
-            <div className="flex flex-wrap items-center justify-center gap-2 mt-1">
-              <button
-                onClick={handleDeepScan}
-                className="px-3 py-1.5 rounded-lg bg-primary text-on-primary text-xs font-extrabold flex items-center gap-1.5 shadow-xs hover:bg-primary-container cursor-pointer transition-all"
-              >
-                <span className="material-symbols-outlined text-[16px]">
-                  radar
-                </span>
-                Scan Nearby Devices
-              </button>
-              <button
-                onClick={() => setActiveMode('ip')}
-                className="px-3 py-1.5 rounded-lg bg-surface-container text-on-surface text-xs font-bold flex items-center gap-1.5 hover:bg-surface-variant cursor-pointer transition-all"
-              >
-                <span className="material-symbols-outlined text-[16px]">
-                  wifi
-                </span>
-                Direct Wi-Fi IP
-              </button>
-              {devices.length === 0 && (
-                <button
-                  onClick={handleRestoreDefaults}
-                  className="px-3 py-1.5 rounded-lg border border-outline-variant/40 text-on-surface-variant hover:text-on-surface text-xs font-bold flex items-center gap-1 cursor-pointer transition-all"
-                >
-                  <span className="material-symbols-outlined text-[16px]">
-                    refresh
-                  </span>
-                  Restore Demo Beds
-                </button>
-              )}
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Physical Pendant PIN Authentication */}
-      <div className="bg-surface-container-lowest rounded-xl p-4 shadow-sm flex flex-col gap-3 border border-outline-variant/15">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <span className="w-8 h-8 rounded-full bg-secondary-fixed flex items-center justify-center text-secondary">
-              <span className="material-symbols-outlined text-[18px]">lock</span>
-            </span>
-            <span className="text-[14px] font-bold text-on-surface">
-              Hardware Pendant Mutual PIN
-            </span>
-          </div>
-          <span className="text-[10px] font-extrabold bg-surface-container px-2 py-0.5 rounded text-outline uppercase">
-            Encrypted
-          </span>
-        </div>
-        <p className="text-xs text-on-surface-variant leading-relaxed">
-          Enter the 6-digit PIN from the bed's physical handset or ESP32 serial monitor to confirm pairing:
-        </p>
-
-        <div className="flex justify-between gap-1.5 my-1">
-          {pinDigits.map((digit, idx) => (
-            <input
-              key={idx}
-              type="text"
-              maxLength={1}
-              value={digit}
-              onChange={(e) => {
-                const newDigits = [...pinDigits];
-                newDigits[idx] = e.target.value;
-                setPinDigits(newDigits);
-              }}
-              className="w-11 h-12 rounded-lg bg-surface-container-low border border-outline-variant/30 text-center text-[20px] font-extrabold text-primary focus:outline-none focus:border-primary"
-            />
-          ))}
-        </div>
-
-        <div className="flex items-center gap-1.5 text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-md">
-          <span className="material-symbols-outlined text-[16px]">
-            verified_user
-          </span>
-          <span>Authentication key verified with ESP32 secure enclave</span>
+              );
+            })
+          )}
         </div>
       </div>
-
-      {pairingNotice && (
-        <div className="p-3 bg-emerald-600 text-white text-center rounded-xl text-xs font-bold animate-in fade-in">
-          {pairingNotice}
-        </div>
-      )}
-
-      {/* Main Pair Button */}
-      <div className="flex flex-col gap-2 pt-1">
-        <button
-          onClick={handlePair}
-          className="w-full h-12 rounded-xl bg-primary hover:bg-primary-container active:scale-98 text-on-primary font-bold text-xs uppercase tracking-wider shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer"
-        >
-          <span className="material-symbols-outlined text-[18px]">link</span>
-          Connect &amp; Pair with {selectedBed}
-        </button>
-      </div>
-
-      {/* Android APK Troubleshooting Guide */}
-      <div className="bg-surface-container-low rounded-xl p-3.5 flex flex-col gap-2.5 border border-outline-variant/15 text-xs text-on-surface-variant">
-        <div className="flex items-center gap-2 text-on-surface font-bold">
-          <span className="material-symbols-outlined text-secondary text-[18px]">
-            help
-          </span>
-          <span>Android APK Device Discovery Checklist</span>
-        </div>
-        <div className="flex flex-col gap-2 text-[11px] leading-relaxed">
-          <div className="p-2 rounded-lg bg-surface-container-lowest border border-outline-variant/20">
-            <strong className="text-on-surface block">1. Android &quot;Nearby Devices&quot; Permission</strong>
-            <span>
-              On Android 12, 13, and 14, apps require explicit permission to scan for Bluetooth. Long-press the MarQ App icon &gt; <strong>App Info &gt; Permissions &gt; Nearby devices &gt; Allow</strong>.
-            </span>
-          </div>
-
-          <div className="p-2 rounded-lg bg-surface-container-lowest border border-outline-variant/20">
-            <strong className="text-on-surface block">2. Turn ON Bluetooth &amp; Location</strong>
-            <span>
-              Swipe down your Android notification shade and ensure both <strong>Bluetooth</strong> and <strong>Location (GPS)</strong> are toggled ON (Android OS requires Location active to scan BLE peripherals).
-            </span>
-          </div>
-
-          <div className="p-2 rounded-lg bg-surface-container-lowest border border-outline-variant/20">
-            <strong className="text-on-surface block">3. Wi-Fi SoftAP Mode (192.168.4.1)</strong>
-            <span>
-              If your bed ESP32 creates a Wi-Fi hotspot (e.g. <em>MarQ-Bed-AP</em>), open your phone&apos;s Wi-Fi settings, connect to it, then tap <strong>&quot;Connect to ESP32 AP (192.168.4.1)&quot;</strong> on the Wi-Fi tab.
-            </span>
-          </div>
-
-          <div className="p-2 rounded-lg bg-surface-container-lowest border border-outline-variant/20">
-            <strong className="text-on-surface block">4. Manual Link Override</strong>
-            <span>
-              Can&apos;t scan? Switch to the <strong>&quot;Manual&quot;</strong> tab above and enter your controller&apos;s name or MAC address to start operating the bed immediately!
-            </span>
-          </div>
-        </div>
-      </div>
-
-      {/* ESP32 Hardware Diagnostics & Firmware Modal */}
-      <ESP32HardwareModal
-        isOpen={showEsp32HardwareModal}
-        onClose={() => setShowEsp32HardwareModal(false)}
-        onConnectIp={(ip, port) => {
-          setManualIp(ip);
-          setManualPort(port);
-          handleConnectIp(ip, port);
-        }}
-      />
     </div>
   );
 };

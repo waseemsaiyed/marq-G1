@@ -1,4 +1,5 @@
 import { PatientProfile, VitalsReading } from '../types';
+import { syncToGoogleSheetsWebhook, getGlobalGoogleSheetsConfig } from '../utils/googleSheetsSync';
 
 export const DEFAULT_PATIENT_PROFILE: PatientProfile = {
   bedId: 'ICU Bed 03',
@@ -284,7 +285,15 @@ export function getPatientProfile(bedId: string = 'ICU Bed 03'): PatientProfile 
       parsed.auditLogs = DEFAULT_PATIENT_PROFILE.auditLogs;
     }
     if (!parsed.googleSheetConfig) {
-      parsed.googleSheetConfig = DEFAULT_PATIENT_PROFILE.googleSheetConfig;
+      parsed.googleSheetConfig = getGlobalGoogleSheetsConfig();
+    } else {
+      const globalSheets = getGlobalGoogleSheetsConfig();
+      if (!parsed.googleSheetConfig.webhookUrl && globalSheets.webhookUrl) {
+        parsed.googleSheetConfig.webhookUrl = globalSheets.webhookUrl;
+      }
+      if (!parsed.googleSheetConfig.spreadsheetId && globalSheets.spreadsheetId) {
+        parsed.googleSheetConfig.spreadsheetId = globalSheets.spreadsheetId;
+      }
     }
     if (!parsed.vitalsHistory || !Array.isArray(parsed.vitalsHistory) || parsed.vitalsHistory.length === 0) {
       parsed.vitalsHistory = DEFAULT_PATIENT_PROFILE.vitalsHistory;
@@ -352,12 +361,41 @@ export function capturePatientVitals(
 export function savePatientProfile(profile: PatientProfile): void {
   if (typeof window === 'undefined') return;
   try {
-    profile.lastUpdated = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + ', ' + new Date().toLocaleDateString([], { month: 'short', day: 'numeric' });
+    profile.lastUpdated =
+      new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) +
+      ', ' +
+      new Date().toLocaleDateString([], { month: 'short', day: 'numeric' });
     localStorage.setItem(`${STORAGE_KEY_PREFIX}${profile.bedId}`, JSON.stringify(profile));
+
     // Dispatch global event for live UI reactivity
     window.dispatchEvent(
       new CustomEvent('marq_patient_profile_changed', { detail: profile })
     );
+
+    // Auto-sync to Google Sheet if configured
+    if (
+      profile.googleSheetConfig?.autoSyncOnSave &&
+      profile.googleSheetConfig?.webhookUrl
+    ) {
+      syncToGoogleSheetsWebhook(
+        profile.googleSheetConfig.webhookUrl,
+        profile,
+        profile.auditLogs || []
+      ).then((res) => {
+        if (res.success) {
+          profile.googleSheetConfig!.lastSyncTime = new Date().toLocaleTimeString([], {
+            hour: '2-digit',
+            minute: '2-digit',
+          });
+          profile.googleSheetConfig!.syncCount =
+            (profile.googleSheetConfig!.syncCount || 0) + 1;
+          localStorage.setItem(
+            `${STORAGE_KEY_PREFIX}${profile.bedId}`,
+            JSON.stringify(profile)
+          );
+        }
+      });
+    }
   } catch (err) {
     console.error('Failed to save patient profile:', err);
   }

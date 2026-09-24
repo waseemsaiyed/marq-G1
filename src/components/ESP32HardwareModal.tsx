@@ -13,7 +13,7 @@ export const ESP32HardwareModal: React.FC<ESP32HardwareModalProps> = ({
   onClose,
   onConnectIp,
 }) => {
-  const [activeTab, setActiveTab] = useState<'network' | 'relays' | 'firmware' | 'guide'>('network');
+  const [activeTab, setActiveTab] = useState<'hybrid' | 'network' | 'relays' | 'firmware' | 'guide'>('hybrid');
   const [copiedCode, setCopiedCode] = useState(false);
   const [bridgeStatus, setBridgeStatus] = useState<ESP32ConnectionStatus>(esp32Bridge.getStatus());
   const [testLog, setTestLog] = useState<string[]>([]);
@@ -75,6 +75,17 @@ export const ESP32HardwareModal: React.FC<ESP32HardwareModalProps> = ({
         {/* Navigation Tabs */}
         <div className="flex border-b border-outline-variant/15 bg-surface-container-low px-3 pt-2 gap-1 overflow-x-auto">
           <button
+            onClick={() => setActiveTab('hybrid')}
+            className={`px-3 py-2 text-xs font-bold rounded-t-lg transition-colors flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
+              activeTab === 'hybrid'
+                ? 'bg-surface text-primary border-t-2 border-primary'
+                : 'text-on-surface-variant hover:text-on-surface'
+            }`}
+          >
+            <span className="material-symbols-outlined text-[16px]">hub</span>
+            Hybrid Dual-Link
+          </button>
+          <button
             onClick={() => setActiveTab('network')}
             className={`px-3 py-2 text-xs font-bold rounded-t-lg transition-colors flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
               activeTab === 'network'
@@ -122,7 +133,77 @@ export const ESP32HardwareModal: React.FC<ESP32HardwareModalProps> = ({
 
         {/* Tab Content */}
         <div className="p-4 overflow-y-auto flex-1 space-y-4 text-xs">
-          
+
+          {/* TAB 0: HYBRID DUAL-LINK */}
+          {activeTab === 'hybrid' && (
+            <div className="space-y-3">
+              <div className="p-3.5 rounded-xl bg-primary/5 border border-primary/25 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="font-extrabold text-on-surface flex items-center gap-1.5 text-xs">
+                    <span className="material-symbols-outlined text-primary text-[18px]">hub</span>
+                    Simultaneous Hybrid Controller Architecture
+                  </span>
+                  <span className="text-[9px] font-extrabold px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-700 border border-emerald-500/30">
+                    WI-FI + BT CLASSIC SPP
+                  </span>
+                </div>
+                <p className="text-[11px] text-on-surface-variant leading-relaxed">
+                  The ESP32 runs both Bluetooth Classic SPP (RFCOMM serial stream) and Wi-Fi WebServer/WebSocket simultaneously.
+                  Commands sent from the phone are transmitted concurrently: Bluetooth provides instant &lt;4ms local response, while Wi-Fi synchronizes hospital central telemetry.
+                </p>
+              </div>
+
+              {/* Protocol Spec Cards */}
+              <div className="grid grid-cols-2 gap-2">
+                <div className="p-3 rounded-xl bg-surface border border-outline-variant/20 space-y-1">
+                  <div className="flex items-center gap-1.5 font-bold text-on-surface">
+                    <span className="material-symbols-outlined text-primary text-[16px]">settings_input_antenna</span>
+                    Bluetooth Classic SPP
+                  </div>
+                  <div className="text-[10px] text-on-surface-variant font-mono space-y-0.5">
+                    <div>UUID: 00001101-0000-1000-8000-00805F9B34FB</div>
+                    <div>Device Name: MarQ-Bed-SPP</div>
+                    <div>Library: BluetoothSerial.h</div>
+                    <div>Baud / Stream: 115200 baud RFCOMM</div>
+                  </div>
+                </div>
+
+                <div className="p-3 rounded-xl bg-surface border border-outline-variant/20 space-y-1">
+                  <div className="flex items-center gap-1.5 font-bold text-on-surface">
+                    <span className="material-symbols-outlined text-primary text-[16px]">wifi</span>
+                    Wi-Fi SoftAP &amp; LAN
+                  </div>
+                  <div className="text-[10px] text-on-surface-variant font-mono space-y-0.5">
+                    <div>SSID: MarQ-Bed-AP (Open)</div>
+                    <div>IP: 192.168.4.1 (Gateway)</div>
+                    <div>HTTP REST: Port 80 (/control)</div>
+                    <div>WebSocket: Port 81 (/ws)</div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Live Status Summary */}
+              <div className="p-3 rounded-xl bg-surface-container space-y-1.5 border border-outline-variant/20">
+                <div className="font-bold text-on-surface flex items-center justify-between">
+                  <span>Current Link Status</span>
+                  <span className="text-[10px] font-mono font-bold text-primary">
+                    {bridgeStatus.lastCommandChannel || 'Bus Initialized'}
+                  </span>
+                </div>
+                <div className="grid grid-cols-2 gap-2 text-[11px]">
+                  <div className="flex items-center gap-1.5">
+                    <span className={`w-2 h-2 rounded-full ${bridgeStatus.wifiConnected ? 'bg-emerald-500' : 'bg-outline-variant'}`} />
+                    <span>Wi-Fi: {bridgeStatus.wifiConnected ? `${bridgeStatus.ip} (OK)` : 'Disconnected'}</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className={`w-2 h-2 rounded-full ${bridgeStatus.bluetoothConnected ? 'bg-emerald-500' : 'bg-outline-variant'}`} />
+                    <span>Bluetooth: {bridgeStatus.bluetoothConnected ? (bridgeStatus.bluetoothType === 'classic' ? 'SPP Active' : 'BLE Active') : 'Disconnected'}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* TAB 1: NETWORK CONFIGURATION */}
           {activeTab === 'network' && (
             <div className="space-y-3">

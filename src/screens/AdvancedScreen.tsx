@@ -121,70 +121,72 @@ export const AdvancedScreen: React.FC<AdvancedScreenProps> = ({
   return (
     <div className="flex flex-col w-full gap-4 max-w-lg mx-auto pb-6">
       {/* Precision HUD Banner */}
-      <div className="flex items-center justify-between bg-surface-container-high px-4 py-2.5 rounded-xl shadow-xs border border-outline-variant/15">
+      <div className="flex items-center justify-between bg-slate-50 px-4 py-2.5 rounded-xl shadow-xs border border-slate-200/60">
         <div className="flex items-center gap-2">
           <span
-            className="material-symbols-outlined text-primary text-[20px]"
+            className="material-symbols-outlined text-primary text-[18px]"
             style={{ fontVariationSettings: "'FILL' 1" }}
           >
             precision_manufacturing
           </span>
-          <div className="flex flex-col">
-            <span className="text-[14px] font-bold text-on-surface">
-              Precision Actuators
+          <div className="flex flex-col text-left">
+            <span className="text-xs font-bold text-slate-800">
+              Calibrated Encoder Modules
             </span>
-            <span className="text-[10px] text-on-surface-variant font-medium">
-              Continuous encoder feedback active
+            <span className="text-[9.5px] text-slate-400 font-semibold uppercase tracking-tight">
+              continuous servo telemetry feed
             </span>
           </div>
         </div>
-        <div className="flex items-center gap-1.5 bg-surface-container-lowest px-3 py-1.5 rounded-full shadow-xs">
-          <span className="w-2 h-2 rounded-full bg-secondary-container animate-pulse" />
-          <span className="text-[11px] text-secondary font-extrabold">
+        <div className="flex items-center gap-1.5 bg-white px-2.5 py-1 rounded-full shadow-2xs border border-slate-100">
+          <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+          <span className="text-[9.5px] text-slate-600 font-bold font-mono">
             {autoLockSeconds > 0
-              ? `Auto-lock in 00:0${autoLockSeconds}s`
-              : 'Bed Auto-Locked'}
+              ? `Auto-lock in ${autoLockSeconds}s`
+              : 'BED AUTO-LOCKED'}
           </span>
         </div>
       </div>
 
       {/* Safety Lock Master Tile */}
       <div
-        className={`relative overflow-hidden rounded-xl p-4 shadow-md transition-all duration-300 border ${
+        className={`relative overflow-hidden rounded-xl p-4 shadow-xs transition-all duration-300 border ${
           bedState.isSafetyLocked
-            ? 'bg-secondary-container text-on-secondary border-secondary'
-            : 'bg-surface-container-highest text-on-surface border-outline-variant/30'
+            ? 'bg-amber-600/5 text-amber-900 border-amber-500/30'
+            : 'bg-slate-50 text-slate-800 border-slate-200/50'
         }`}
       >
         <div className="flex items-start justify-between gap-3">
           <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-full bg-white/20 flex items-center justify-center shrink-0">
+            <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${
+              bedState.isSafetyLocked ? 'bg-amber-500/10 text-amber-700' : 'bg-slate-200 text-slate-600'
+            }`}>
               <span
-                className="material-symbols-outlined text-[28px]"
+                className="material-symbols-outlined text-[20px]"
                 style={{ fontVariationSettings: "'FILL' 1" }}
               >
                 {bedState.isSafetyLocked ? 'lock' : 'lock_open'}
               </span>
             </div>
-            <div className="flex flex-col">
-              <div className="flex items-center gap-2">
-                <span className="text-[13px] font-bold uppercase tracking-wider">
-                  Safety Lockout
+            <div className="flex flex-col text-left">
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs font-extrabold uppercase tracking-widest text-slate-400">
+                  Actuator Lockout
                 </span>
                 <span
-                  className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full uppercase ${
+                  className={`text-[9px] font-extrabold px-1.5 py-0.2 rounded uppercase ${
                     bedState.isSafetyLocked
-                      ? 'bg-white text-secondary-container'
-                      : 'bg-primary text-on-primary'
+                      ? 'bg-amber-500/25 text-amber-900'
+                      : 'bg-primary/10 text-primary'
                   }`}
                 >
-                  {bedState.isSafetyLocked ? 'ENGAGED' : 'DISENGAGED'}
+                  {bedState.isSafetyLocked ? 'Engaged' : 'Operational'}
                 </span>
               </div>
-              <span className="text-xs opacity-90 mt-0.5">
+              <span className="text-[11px] text-slate-500 mt-0.5">
                 {bedState.isSafetyLocked
-                  ? 'Press & hold 2s to release bed controls'
-                  : 'All physical and digital motors operational'}
+                  ? 'Hold button for 2s to release lockout'
+                  : 'All articulation columns are live and editable'}
               </span>
             </div>
           </div>
@@ -197,51 +199,51 @@ export const AdvancedScreen: React.FC<AdvancedScreenProps> = ({
               startUnlockHold();
             }}
             onTouchEnd={cancelUnlockHold}
-            className="min-w-[60px] sm:min-w-[64px] min-h-[44px] sm:min-h-[48px] px-3 sm:px-3.5 py-1.5 sm:py-2 rounded-xl bg-white text-secondary font-extrabold text-[11px] sm:text-xs uppercase shadow-sm active:scale-95 transition-transform flex items-center justify-center select-none cursor-pointer"
+            className="min-h-[34px] px-3.5 rounded-lg bg-white border border-slate-200 text-slate-700 font-bold text-[10px] uppercase shadow-2xs cursor-pointer select-none"
           >
-            {bedState.isSafetyLocked ? 'HOLD 2S' : 'ENGAGE'}
+            {bedState.isSafetyLocked ? 'Unlock (2s)' : 'Lock'}
           </button>
         </div>
 
-        <div className="w-full bg-black/20 h-1.5 rounded-full mt-3 overflow-hidden">
+        {/* Tactile progress rail */}
+        <div className="w-full bg-slate-200/50 h-1 rounded-full mt-3 overflow-hidden">
           <div
-            className="h-full bg-white transition-all duration-100 ease-linear"
+            className="h-full bg-amber-600 transition-all duration-100 ease-linear"
             style={{ width: `${unlockProgress}%` }}
           />
         </div>
       </div>
 
-      {/* Articulation Sliders Bento */}
-      <div className="flex flex-col gap-3">
+      {/* Articulation Sliders List (Flat, unnested, neat dividers) */}
+      <div className="flex flex-col gap-3.5">
         {/* Head Articulation Card */}
-        <div className="bg-surface-container-lowest rounded-xl p-3.5 sm:p-4 shadow-sm flex flex-col gap-2.5 sm:gap-3 border border-outline-variant/15">
+        <div className="bg-white rounded-xl p-4 shadow-xs flex flex-col gap-3 border border-slate-200/60">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2 sm:gap-2.5">
-              <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-lg bg-surface-container flex items-center justify-center text-primary">
-                <span className="material-symbols-outlined text-[20px] sm:text-[22px]">
-                  airline_seat_flat_angled
-                </span>
-              </div>
-              <div>
-                <h2 className="text-[15px] sm:text-[16px] font-bold text-on-surface">
+            <div className="flex items-center gap-2">
+              <span className="material-symbols-outlined text-primary text-[20px]">
+                airline_seat_flat_angled
+              </span>
+              <div className="text-left">
+                <h2 className="text-xs font-bold text-slate-800 uppercase tracking-wider">
                   Head Articulation
                 </h2>
-                <span className="text-[10px] sm:text-[11px] text-on-surface-variant font-medium">
-                  Fowler positioning (0° to 90° Incline)
+                <span className="text-[10px] text-slate-400 font-semibold uppercase font-mono">
+                  Fowler Position Range
                 </span>
               </div>
             </div>
-            <div className="flex items-baseline gap-0.5">
-              <span className="text-[32px] sm:text-[36px] font-extrabold text-primary tabular-nums">
+            <div className="text-right">
+              <span className="text-2xl font-black text-primary font-mono tabular-nums leading-none">
                 {bedState.headAngle}
               </span>
-              <span className="text-[16px] sm:text-[18px] font-bold text-primary">°</span>
+              <span className="text-xs font-bold text-slate-400 ml-0.5">°</span>
             </div>
           </div>
 
+          {/* Calibrated range slider */}
           <div className="flex flex-col gap-1.5">
             <div className="relative w-full h-8 flex items-center">
-              <div className="w-full h-3 bg-surface-container rounded-full overflow-hidden">
+              <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
                 <div
                   className="h-full bg-primary rounded-full transition-all duration-150"
                   style={{ width: `${(bedState.headAngle / 90) * 100}%` }}
@@ -256,24 +258,24 @@ export const AdvancedScreen: React.FC<AdvancedScreenProps> = ({
                 className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
               />
             </div>
-            <div className="flex justify-between text-[10px] sm:text-[11px] text-on-surface-variant px-1 font-semibold">
-              <span>0° (Supine)</span>
-              <span>30° (Semi-Fowler)</span>
-              <span>45° (Fowler)</span>
-              <span>90° (Full Incline)</span>
+            <div className="flex justify-between text-[9px] text-slate-400 font-bold uppercase tracking-wider px-0.5">
+              <span>0° Supine</span>
+              <span>30° Semi-Fowler</span>
+              <span>45° Fowler</span>
+              <span>90° Incline</span>
             </div>
           </div>
 
           {/* Quick Head Presets */}
-          <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-1.5">
             {[0, 15, 30, 45, 60, 90].map((ang) => (
               <button
                 key={ang}
                 onClick={() => updateHead(ang)}
-                className={`px-2.5 py-1 rounded-lg text-[10.5px] sm:text-[11px] font-bold shrink-0 transition-all cursor-pointer ${
+                className={`px-2.5 py-1 rounded text-[10px] font-bold shrink-0 transition-all cursor-pointer ${
                   bedState.headAngle === ang
-                    ? 'bg-primary text-on-primary'
-                    : 'bg-surface-container hover:bg-surface-variant text-on-surface'
+                    ? 'bg-primary text-white'
+                    : 'bg-slate-50 hover:bg-slate-100 text-slate-600'
                 }`}
               >
                 {ang === 0 ? '0° Flat' : ang === 90 ? '90° Max' : `${ang}°`}
@@ -281,57 +283,57 @@ export const AdvancedScreen: React.FC<AdvancedScreenProps> = ({
             ))}
           </div>
 
-          <div className="grid grid-cols-2 gap-2 sm:gap-2.5 pt-1">
+          {/* Steppers */}
+          <div className="grid grid-cols-2 gap-2 pt-1 border-t border-slate-100">
             <button
               onClick={() => updateHead(bedState.headAngle - 1)}
-              className="min-h-[52px] sm:min-h-[58px] rounded-xl bg-surface-container-low hover:bg-surface-container active:bg-surface-dim text-on-surface flex items-center justify-center gap-2 shadow-xs active:scale-95 transition-all cursor-pointer border border-outline-variant/15"
+              className="h-10 rounded-lg bg-slate-50 hover:bg-slate-100 text-slate-700 flex items-center justify-center gap-1.5 text-[11px] font-bold uppercase tracking-wider cursor-pointer border border-slate-200/50"
             >
-              <span className="material-symbols-outlined text-[22px] sm:text-[24px]">
+              <span className="material-symbols-outlined text-[15px]">
                 remove_circle_outline
               </span>
-              <span className="text-[11px] sm:text-[12px] font-bold uppercase">- 1° Precise</span>
+              <span>-1° Step</span>
             </button>
             <button
               onClick={() => updateHead(bedState.headAngle + 1)}
-              className="min-h-[52px] sm:min-h-[58px] rounded-xl bg-primary-container text-on-primary hover:bg-primary active:bg-primary-fixed-dim flex items-center justify-center gap-2 shadow-xs active:scale-95 transition-all cursor-pointer"
+              className="h-10 rounded-lg bg-slate-50 hover:bg-slate-100 text-slate-700 flex items-center justify-center gap-1.5 text-[11px] font-bold uppercase tracking-wider cursor-pointer border border-slate-200/50"
             >
-              <span className="material-symbols-outlined text-[22px] sm:text-[24px]">
+              <span className="material-symbols-outlined text-[15px]">
                 add_circle_outline
               </span>
-              <span className="text-[11px] sm:text-[12px] font-bold uppercase">+ 1° Precise</span>
+              <span>+1° Step</span>
             </button>
           </div>
         </div>
 
         {/* Knee & Foot Articulation Card */}
-        <div className="bg-surface-container-lowest rounded-xl p-3.5 sm:p-4 shadow-sm flex flex-col gap-2.5 sm:gap-3 border border-outline-variant/15">
+        <div className="bg-white rounded-xl p-4 shadow-xs flex flex-col gap-3 border border-slate-200/60">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2 sm:gap-2.5">
-              <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-lg bg-surface-container flex items-center justify-center text-primary">
-                <span className="material-symbols-outlined text-[20px] sm:text-[22px]">
-                  airline_seat_legroom_extra
-                </span>
-              </div>
-              <div>
-                <h2 className="text-[15px] sm:text-[16px] font-bold text-on-surface">
-                  Knee &amp; Foot
+            <div className="flex items-center gap-2">
+              <span className="material-symbols-outlined text-primary text-[20px]">
+                airline_seat_legroom_extra
+              </span>
+              <div className="text-left">
+                <h2 className="text-xs font-bold text-slate-800 uppercase tracking-wider">
+                  Knee break flexion
                 </h2>
-                <span className="text-[10px] sm:text-[11px] text-on-surface-variant font-medium">
-                  Vascular flex (Max 45°)
+                <span className="text-[10px] text-slate-400 font-semibold uppercase font-mono">
+                  Circulatory vascular range
                 </span>
               </div>
             </div>
-            <div className="flex items-baseline gap-0.5">
-              <span className="text-[32px] sm:text-[36px] font-extrabold text-primary tabular-nums">
+            <div className="text-right">
+              <span className="text-2xl font-black text-primary font-mono tabular-nums leading-none">
                 {bedState.kneeAngle}
               </span>
-              <span className="text-[16px] sm:text-[18px] font-bold text-primary">°</span>
+              <span className="text-xs font-bold text-slate-400 ml-0.5">°</span>
             </div>
           </div>
 
+          {/* Calibrated range slider */}
           <div className="flex flex-col gap-1.5">
             <div className="relative w-full h-8 flex items-center">
-              <div className="w-full h-3 bg-surface-container rounded-full overflow-hidden">
+              <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
                 <div
                   className="h-full bg-primary rounded-full transition-all duration-150"
                   style={{ width: `${(bedState.kneeAngle / 45) * 100}%` }}
@@ -346,64 +348,64 @@ export const AdvancedScreen: React.FC<AdvancedScreenProps> = ({
                 className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
               />
             </div>
-            <div className="flex justify-between text-[10px] sm:text-[11px] text-on-surface-variant px-1 font-semibold">
-              <span>0° (Flat)</span>
-              <span>20° (Circulation)</span>
-              <span>45° (Max Flex)</span>
+            <div className="flex justify-between text-[9px] text-slate-400 font-bold uppercase tracking-wider px-0.5">
+              <span>0° Supine</span>
+              <span>20° Circulation</span>
+              <span>45° Max Flexion</span>
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-2 sm:gap-2.5 pt-1">
+          {/* Steppers */}
+          <div className="grid grid-cols-2 gap-2 pt-1 border-t border-slate-100">
             <button
               onClick={() => updateKnee(bedState.kneeAngle - 1)}
-              className="min-h-[52px] sm:min-h-[58px] rounded-xl bg-surface-container-low hover:bg-surface-container active:bg-surface-dim text-on-surface flex items-center justify-center gap-2 shadow-xs active:scale-95 transition-all cursor-pointer border border-outline-variant/15"
+              className="h-10 rounded-lg bg-slate-50 hover:bg-slate-100 text-slate-700 flex items-center justify-center gap-1.5 text-[11px] font-bold uppercase tracking-wider cursor-pointer border border-slate-200/50"
             >
-              <span className="material-symbols-outlined text-[22px] sm:text-[24px]">
+              <span className="material-symbols-outlined text-[15px]">
                 remove_circle_outline
               </span>
-              <span className="text-[11px] sm:text-[12px] font-bold uppercase">- 1° Lower</span>
+              <span>-1° Lower</span>
             </button>
             <button
               onClick={() => updateKnee(bedState.kneeAngle + 1)}
-              className="min-h-[52px] sm:min-h-[58px] rounded-xl bg-primary-container text-on-primary hover:bg-primary active:bg-primary-fixed-dim flex items-center justify-center gap-2 shadow-xs active:scale-95 transition-all cursor-pointer"
+              className="h-10 rounded-lg bg-slate-50 hover:bg-slate-100 text-slate-700 flex items-center justify-center gap-1.5 text-[11px] font-bold uppercase tracking-wider cursor-pointer border border-slate-200/50"
             >
-              <span className="material-symbols-outlined text-[22px] sm:text-[24px]">
+              <span className="material-symbols-outlined text-[15px]">
                 add_circle_outline
               </span>
-              <span className="text-[11px] sm:text-[12px] font-bold uppercase">+ 1° Raise</span>
+              <span>+1° Raise</span>
             </button>
           </div>
         </div>
 
-        {/* Overall Height Elevation */}
-        <div className="bg-surface-container-lowest rounded-xl p-3.5 sm:p-4 shadow-sm flex flex-col gap-2.5 sm:gap-3 border border-outline-variant/15">
+        {/* Overall Height Elevation Card */}
+        <div className="bg-white rounded-xl p-4 shadow-xs flex flex-col gap-3 border border-slate-200/60">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2 sm:gap-2.5">
-              <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-lg bg-surface-container flex items-center justify-center text-primary">
-                <span className="material-symbols-outlined text-[20px] sm:text-[22px]">
-                  height
-                </span>
-              </div>
-              <div>
-                <h2 className="text-[15px] sm:text-[16px] font-bold text-on-surface">
-                  Bed Elevation
+            <div className="flex items-center gap-2">
+              <span className="material-symbols-outlined text-primary text-[20px]">
+                height
+              </span>
+              <div className="text-left">
+                <h2 className="text-xs font-bold text-slate-800 uppercase tracking-wider">
+                  Bed Elevation Height
                 </h2>
-                <span className="text-[10px] sm:text-[11px] text-on-surface-variant font-medium">
-                  Dual synchronized columns
+                <span className="text-[10px] text-slate-400 font-semibold uppercase font-mono">
+                  Synchronized lift columns
                 </span>
               </div>
             </div>
-            <div className="flex items-baseline gap-0.5">
-              <span className="text-[32px] sm:text-[36px] font-extrabold text-primary tabular-nums">
+            <div className="text-right">
+              <span className="text-2xl font-black text-primary font-mono tabular-nums leading-none">
                 {bedState.overallHeight}
               </span>
-              <span className="text-[16px] sm:text-[18px] font-bold text-primary">cm</span>
+              <span className="text-xs font-bold text-slate-400 ml-0.5">cm</span>
             </div>
           </div>
 
+          {/* Calibrated range slider */}
           <div className="flex flex-col gap-1.5">
             <div className="relative w-full h-8 flex items-center">
-              <div className="w-full h-3 bg-surface-container rounded-full overflow-hidden">
+              <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
                 <div
                   className="h-full bg-primary rounded-full transition-all duration-150"
                   style={{
@@ -420,194 +422,128 @@ export const AdvancedScreen: React.FC<AdvancedScreenProps> = ({
                 className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
               />
             </div>
-            <div className="flex justify-between text-[10px] sm:text-[11px] text-on-surface-variant px-1 font-semibold">
-              <span>38 cm (Transfer)</span>
-              <span>60 cm (Care)</span>
-              <span>85 cm (Ergo High)</span>
+            <div className="flex justify-between text-[9px] text-slate-400 font-bold uppercase tracking-wider px-0.5">
+              <span>38cm Transfer</span>
+              <span>60cm Care Assist</span>
+              <span>85cm Ergo Max</span>
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-2 sm:gap-2.5 pt-1">
+          {/* Steppers */}
+          <div className="grid grid-cols-2 gap-2 pt-1 border-t border-slate-100">
             <button
               onClick={() => updateElev(bedState.overallHeight - 1)}
-              className="min-h-[52px] sm:min-h-[58px] rounded-xl bg-surface-container-low hover:bg-surface-container active:bg-surface-dim text-on-surface flex items-center justify-center gap-2 shadow-xs active:scale-95 transition-all cursor-pointer border border-outline-variant/15"
+              className="h-10 rounded-lg bg-slate-50 hover:bg-slate-100 text-slate-700 flex items-center justify-center gap-1.5 text-[11px] font-bold uppercase tracking-wider cursor-pointer border border-slate-200/50"
             >
-              <span className="material-symbols-outlined text-[22px] sm:text-[24px]">
+              <span className="material-symbols-outlined text-[15px]">
                 arrow_downward
               </span>
-              <span className="text-[11px] sm:text-[12px] font-bold uppercase">Lower Column</span>
+              <span>Lower (1cm)</span>
             </button>
             <button
               onClick={() => updateElev(bedState.overallHeight + 1)}
-              className="min-h-[52px] sm:min-h-[58px] rounded-xl bg-primary-container text-on-primary hover:bg-primary active:bg-primary-fixed-dim flex items-center justify-center gap-2 shadow-xs active:scale-95 transition-all cursor-pointer"
+              className="h-10 rounded-lg bg-slate-50 hover:bg-slate-100 text-slate-700 flex items-center justify-center gap-1.5 text-[11px] font-bold uppercase tracking-wider cursor-pointer border border-slate-200/50"
             >
-              <span className="material-symbols-outlined text-[22px] sm:text-[24px]">
+              <span className="material-symbols-outlined text-[15px]">
                 arrow_upward
               </span>
-              <span className="text-[11px] sm:text-[12px] font-bold uppercase">Raise Column</span>
+              <span>Elevate (1cm)</span>
             </button>
           </div>
         </div>
 
         {/* Trendelenburg Card */}
-        <div className="bg-surface-container-lowest rounded-xl p-4 shadow-sm flex flex-col gap-3 border border-outline-variant/15">
+        <div className="bg-white rounded-xl p-4 shadow-xs flex flex-col gap-3 border border-slate-200/60">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2.5">
-              <div className="w-9 h-9 rounded-lg bg-surface-container flex items-center justify-center text-secondary">
-                <span className="material-symbols-outlined text-[22px]">
-                  swap_vert
-                </span>
-              </div>
-              <div>
-                <h2 className="text-[16px] font-bold text-on-surface">
-                  Axis Tilt (Trendelenburg)
+            <div className="flex items-center gap-2">
+              <span className="material-symbols-outlined text-secondary text-[20px]">
+                swap_vert
+              </span>
+              <div className="text-left">
+                <h2 className="text-xs font-bold text-slate-800 uppercase tracking-wider">
+                  Trendelenburg Tilt Plane
                 </h2>
-                <span className="text-[11px] text-on-surface-variant font-medium">
-                  Longitudinal tilt plane (0° to 90° Limit)
+                <span className="text-[10px] text-slate-400 font-semibold uppercase font-mono">
+                  Continuous tilt range
                 </span>
               </div>
             </div>
-            <div className="flex items-baseline gap-0.5">
-              <span className="text-[36px] font-extrabold text-secondary tabular-nums">
+            <div className="text-right">
+              <span className="text-2xl font-black text-secondary font-mono tabular-nums leading-none">
                 {Math.abs(bedState.tiltAngle)}
               </span>
-              <span className="text-[18px] font-bold text-secondary">°</span>
+              <span className="text-xs font-bold text-slate-400 ml-0.5">°</span>
             </div>
           </div>
 
-          <div className="bg-surface-container-low px-3 py-2 rounded-lg flex items-center justify-between">
-            <span className="text-[11px] text-on-surface-variant font-semibold">
-              Current Orientation:
-            </span>
-            <span className="text-[11px] text-secondary font-extrabold uppercase">
+          <div className="bg-slate-50 px-3 py-1.5 rounded-lg flex items-center justify-between border border-slate-100">
+            <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Orientation</span>
+            <span className="text-[10px] text-secondary font-bold font-mono">
               {bedState.tiltAngle === 0
-                ? 'Level (0° Horizontal)'
+                ? '0° LEVEL HORIZONTAL'
                 : bedState.tiltAngle < 0
-                ? `Trendelenburg (${Math.abs(bedState.tiltAngle)}° Head Down)`
-                : `Rev Trendelenburg (${bedState.tiltAngle}° Head Up)`}
+                ? `TRENDELENBURG (${Math.abs(bedState.tiltAngle)}° HEAD DOWN)`
+                : `REV. TRENDELENBURG (${bedState.tiltAngle}° HEAD UP)`}
             </span>
           </div>
 
-          {/* Direction Mode Selector */}
-          <div className="grid grid-cols-3 gap-1.5 p-1 bg-surface-container rounded-xl">
+          {/* Direction selector */}
+          <div className="grid grid-cols-3 gap-1 p-0.5 bg-slate-100 rounded-lg">
             <button
               onClick={() => {
                 const mag = Math.abs(bedState.tiltAngle) || 15;
                 updateTilt(-mag);
               }}
-              className={`py-2 px-1 rounded-lg text-[11px] font-bold transition-all flex flex-col items-center justify-center cursor-pointer ${
+              className={`py-1.5 rounded-md text-[10px] font-bold transition-all cursor-pointer ${
                 bedState.tiltAngle < 0
-                  ? 'bg-secondary text-on-secondary shadow-xs'
-                  : 'text-on-surface hover:bg-surface-container-high'
+                  ? 'bg-secondary text-white shadow-2xs'
+                  : 'text-slate-600 hover:text-slate-800'
               }`}
             >
-              <span>Trendelenburg</span>
-              <span className="text-[9px] opacity-80">Head Down</span>
+              Trendelenburg
             </button>
             <button
               onClick={() => updateTilt(0)}
-              className={`py-2 px-1 rounded-lg text-[11px] font-bold transition-all flex flex-col items-center justify-center cursor-pointer ${
+              className={`py-1.5 rounded-md text-[10px] font-bold transition-all cursor-pointer ${
                 bedState.tiltAngle === 0
-                  ? 'bg-surface-container-lowest text-on-surface shadow-xs ring-1 ring-outline-variant/30'
-                  : 'text-on-surface hover:bg-surface-container-high'
+                  ? 'bg-white text-slate-900 shadow-2xs border border-slate-200/50'
+                  : 'text-slate-600 hover:text-slate-800'
               }`}
             >
-              <span>Level 0°</span>
-              <span className="text-[9px] opacity-80">Horizontal</span>
+              Level 0°
             </button>
             <button
               onClick={() => {
                 const mag = Math.abs(bedState.tiltAngle) || 15;
                 updateTilt(mag);
               }}
-              className={`py-2 px-1 rounded-lg text-[11px] font-bold transition-all flex flex-col items-center justify-center cursor-pointer ${
+              className={`py-1.5 rounded-md text-[10px] font-bold transition-all cursor-pointer ${
                 bedState.tiltAngle > 0
-                  ? 'bg-primary text-on-primary shadow-xs'
-                  : 'text-on-surface hover:bg-surface-container-high'
+                  ? 'bg-primary text-white shadow-2xs'
+                  : 'text-slate-600 hover:text-slate-800'
               }`}
             >
-              <span>Rev Trend</span>
-              <span className="text-[9px] opacity-80">Head Up</span>
+              Rev. Trend
             </button>
           </div>
 
-          {/* Continuous Range Slider 0° to 90° */}
-          <div className="flex flex-col gap-1.5">
-            <div className="relative w-full h-8 flex items-center">
-              <div className="w-full h-3 bg-surface-container rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-secondary rounded-full transition-all duration-150"
-                  style={{ width: `${(Math.abs(bedState.tiltAngle) / 90) * 100}%` }}
-                />
-              </div>
-              <input
-                type="range"
-                min="0"
-                max="90"
-                value={Math.abs(bedState.tiltAngle)}
-                onChange={(e) => {
-                  const deg = parseInt(e.target.value, 10);
-                  const dir = bedState.tiltAngle >= 0 ? 1 : -1;
-                  updateTilt(deg * dir);
-                }}
-                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-              />
-            </div>
-            <div className="flex justify-between text-[11px] text-on-surface-variant px-1 font-semibold">
-              <span>0° (Level)</span>
-              <span>15° (Std)</span>
-              <span>30° (Med)</span>
-              <span>45° (Deep)</span>
-              <span>90° (Full Vertical)</span>
-            </div>
-          </div>
-
-          {/* Quick Presets 0 to 90 degrees */}
-          <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
-            {[0, 12, 15, 30, 45, 60, 90].map((deg) => {
-              const currentMag = Math.abs(bedState.tiltAngle);
-              const isSelected = currentMag === deg;
-              return (
-                <button
-                  key={deg}
-                  onClick={() => {
-                    if (deg === 0) {
-                      updateTilt(0);
-                    } else {
-                      const sign = bedState.tiltAngle <= 0 ? -1 : 1;
-                      updateTilt(deg * sign);
-                    }
-                  }}
-                  className={`px-2.5 py-1 rounded-lg text-[11px] font-bold shrink-0 transition-all cursor-pointer ${
-                    isSelected
-                      ? 'bg-secondary text-on-secondary'
-                      : 'bg-surface-container hover:bg-surface-variant text-on-surface'
-                  }`}
-                >
-                  {deg === 0 ? '0° Level' : deg === 90 ? '90° Max' : `${deg}°`}
-                </button>
-              );
-            })}
-          </div>
-
-          {/* Steppers & Trigger Modal Button */}
-          <div className="grid grid-cols-3 gap-1.5 sm:gap-2 pt-1">
+          {/* Steppers */}
+          <div className="grid grid-cols-3 gap-2 pt-1 border-t border-slate-100">
             <button
               onClick={() => {
                 const current = bedState.tiltAngle;
                 if (current < 0) {
-                  // Trendelenburg: decrease magnitude (towards 0)
                   updateTilt(Math.min(0, current + 1));
                 } else if (current > 0) {
                   updateTilt(Math.max(0, current - 1));
                 }
               }}
-              className="min-h-[46px] sm:min-h-[50px] rounded-xl bg-surface-container-low hover:bg-surface-container active:bg-surface-dim text-on-surface flex items-center justify-center gap-1 sm:gap-1.5 shadow-xs active:scale-95 transition-all cursor-pointer border border-outline-variant/15"
+              className="h-10 rounded-lg bg-slate-50 hover:bg-slate-100 text-slate-700 flex items-center justify-center gap-1 text-[11px] font-bold uppercase tracking-wider cursor-pointer border border-slate-200/50"
             >
-              <span className="material-symbols-outlined text-[18px] sm:text-[20px]">
+              <span className="material-symbols-outlined text-[15px]">
                 remove_circle_outline
               </span>
-              <span className="text-[10px] sm:text-[11px] font-bold uppercase">- 1° Tilt</span>
+              <span>-1° Tilt</span>
             </button>
             <button
               onClick={() => {
@@ -618,12 +554,12 @@ export const AdvancedScreen: React.FC<AdvancedScreenProps> = ({
                   updateTilt(Math.min(90, current + 1));
                 }
               }}
-              className="min-h-[46px] sm:min-h-[50px] rounded-xl bg-surface-container-low hover:bg-surface-container active:bg-surface-dim text-on-surface flex items-center justify-center gap-1 sm:gap-1.5 shadow-xs active:scale-95 transition-all cursor-pointer border border-outline-variant/15"
+              className="h-10 rounded-lg bg-slate-50 hover:bg-slate-100 text-slate-700 flex items-center justify-center gap-1 text-[11px] font-bold uppercase tracking-wider cursor-pointer border border-slate-200/50"
             >
-              <span className="material-symbols-outlined text-[18px] sm:text-[20px]">
+              <span className="material-symbols-outlined text-[15px]">
                 add_circle_outline
               </span>
-              <span className="text-[10px] sm:text-[11px] font-bold uppercase">+ 1° Tilt</span>
+              <span>+1° Tilt</span>
             </button>
             <button
               onClick={() => {
@@ -631,68 +567,45 @@ export const AdvancedScreen: React.FC<AdvancedScreenProps> = ({
                 setTiltDirection(bedState.tiltAngle >= 0 ? 'rev' : 'trend');
                 setShowTrendModal(true);
               }}
-              className="min-h-[46px] sm:min-h-[50px] rounded-xl bg-secondary-container hover:bg-secondary active:bg-secondary-fixed text-on-secondary-container hover:text-on-secondary flex flex-col items-center justify-center gap-0.5 shadow-xs active:scale-95 transition-all cursor-pointer"
+              className="h-10 rounded-lg bg-secondary-container hover:bg-secondary text-white flex items-center justify-center gap-1 text-[11px] font-extrabold uppercase cursor-pointer"
             >
-              <div className="flex items-center gap-1">
-                <span className="material-symbols-outlined text-[16px] sm:text-[18px]">
-                  security
-                </span>
-                <span className="text-[10px] sm:text-[11px] font-extrabold uppercase">
-                  Safety Auth
-                </span>
-              </div>
-              <span className="text-[8.5px] sm:text-[9px] opacity-80">Dual Trigger (0-90°)</span>
+              <span className="material-symbols-outlined text-[15px]">
+                security
+              </span>
+              <span>Dual Auth</span>
             </button>
           </div>
         </div>
       </div>
 
-      {/* Actuator Diagnostics Grid */}
-      <div className="bg-surface-container-high rounded-xl p-3.5 sm:p-4 shadow-sm flex flex-col gap-2 sm:gap-2.5 border border-outline-variant/15">
+      {/* Actuator Diagnostics Grid - Highly calibrated instruments look */}
+      <div className="bg-white rounded-xl p-4 shadow-xs flex flex-col gap-3.5 border border-slate-200/60">
         <div className="flex items-center justify-between">
-          <span className="text-[11px] sm:text-[12px] font-extrabold uppercase text-on-surface-variant">
-            Actuator Diagnostics
+          <span className="text-[10px] font-extrabold uppercase tracking-widest text-slate-400">
+            Real-Time Diagnostics
           </span>
           <div className="flex items-center gap-1 text-primary">
-            <span className="material-symbols-outlined text-[15px] sm:text-[16px] animate-spin">
+            <span className="material-symbols-outlined text-[13px] animate-spin">
               sync
             </span>
-            <span className="text-[10.5px] sm:text-[11px] font-bold">ESP32 100Hz</span>
+            <span className="text-[10px] font-bold font-mono">ESP32 100Hz</span>
           </div>
         </div>
-        <div className="grid grid-cols-3 gap-1.5 sm:gap-2">
-          <div className="bg-surface-container-lowest p-2 sm:p-2.5 rounded-lg flex flex-col items-center text-center shadow-xs">
-            <span className="text-[9.5px] sm:text-[10px] font-bold text-on-surface-variant truncate w-full">
-              Head M1
-            </span>
-            <span className="text-[13px] sm:text-[14px] font-extrabold text-primary mt-0.5 sm:mt-1">
-              34°C
-            </span>
-            <span className="text-[9.5px] sm:text-[10px] text-on-surface-variant font-medium">
-              Nominal
-            </span>
+        <div className="grid grid-cols-3 gap-2 text-center">
+          <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200/30">
+            <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">Head M1</span>
+            <span className="text-sm font-bold text-primary font-mono mt-0.5 block">34.2 °C</span>
+            <span className="text-[8px] font-extrabold text-emerald-600 block uppercase mt-0.5">Nominal</span>
           </div>
-          <div className="bg-surface-container-lowest p-2 sm:p-2.5 rounded-lg flex flex-col items-center text-center shadow-xs">
-            <span className="text-[9.5px] sm:text-[10px] font-bold text-on-surface-variant truncate w-full">
-              Foot M2
-            </span>
-            <span className="text-[13px] sm:text-[14px] font-extrabold text-primary mt-0.5 sm:mt-1">
-              31°C
-            </span>
-            <span className="text-[9.5px] sm:text-[10px] text-on-surface-variant font-medium">
-              Nominal
-            </span>
+          <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200/30">
+            <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">Foot M2</span>
+            <span className="text-sm font-bold text-primary font-mono mt-0.5 block">31.0 °C</span>
+            <span className="text-[8px] font-extrabold text-emerald-600 block uppercase mt-0.5">Nominal</span>
           </div>
-          <div className="bg-surface-container-lowest p-2 sm:p-2.5 rounded-lg flex flex-col items-center text-center shadow-xs">
-            <span className="text-[9.5px] sm:text-[10px] font-bold text-on-surface-variant truncate w-full">
-              Lift Dual
-            </span>
-            <span className="text-[13px] sm:text-[14px] font-extrabold text-primary mt-0.5 sm:mt-1">
-              0.0 mm
-            </span>
-            <span className="text-[9.5px] sm:text-[10px] text-on-surface-variant font-medium">
-              Synced
-            </span>
+          <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200/30">
+            <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">Dual Columns</span>
+            <span className="text-sm font-bold text-primary font-mono mt-0.5 block">Synced</span>
+            <span className="text-[8px] font-extrabold text-emerald-600 block uppercase mt-0.5">Nominal</span>
           </div>
         </div>
       </div>
@@ -701,92 +614,53 @@ export const AdvancedScreen: React.FC<AdvancedScreenProps> = ({
       <div className="w-full pt-1">
         <button
           onClick={onTriggerEStop}
-          className="w-full min-h-[58px] sm:min-h-[64px] rounded-xl bg-tertiary hover:bg-tertiary-container active:scale-98 text-on-tertiary flex items-center justify-center gap-2.5 sm:gap-3 shadow-lg transition-transform cursor-pointer"
+          className="w-full h-[54px] rounded-xl bg-red-600 hover:bg-red-700 text-white flex items-center justify-center gap-2 transition-all cursor-pointer shadow-xs"
         >
-          <span
-            className="material-symbols-outlined text-[24px] sm:text-[28px]"
-            style={{ fontVariationSettings: "'FILL' 1" }}
-          >
+          <span className="material-symbols-outlined text-[20px]">
             emergency_home
           </span>
-          <span className="text-[13px] sm:text-[15px] font-extrabold uppercase tracking-wider">
+          <span className="text-xs font-extrabold uppercase tracking-wider">
             Emergency Actuator Stop
           </span>
         </button>
       </div>
 
-      {/* Safety Confirmation Overlay Modal for Trendelenburg Action */}
+      {/* Safety Confirmation Overlay Modal */}
       {showTrendModal && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-200">
-          <div className="bg-surface-container-lowest text-on-surface w-full max-w-sm rounded-xl p-5 shadow-2xl flex flex-col gap-4 border border-outline-variant/30">
+        <div className="fixed inset-0 z-[110] bg-black/50 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-white text-slate-800 w-full max-w-sm rounded-xl p-5 shadow-xl flex flex-col gap-4 border border-slate-200">
             <div className="flex items-start gap-3">
-              <div className="w-12 h-12 rounded-full bg-tertiary-fixed flex items-center justify-center shrink-0 text-tertiary">
-                <span
-                  className="material-symbols-outlined text-[28px]"
-                  style={{ fontVariationSettings: "'FILL' 1" }}
-                >
+              <div className="w-10 h-10 rounded-full bg-red-50 text-red-600 flex items-center justify-center shrink-0">
+                <span className="material-symbols-outlined text-[20px]">
                   warning
                 </span>
               </div>
-              <div className="flex flex-col">
-                <h3 className="text-[18px] font-bold text-tertiary">
-                  Clinical Warning
+              <div className="flex flex-col text-left">
+                <h3 className="text-sm font-bold text-red-600 uppercase tracking-wider">
+                  Cranial Precaution Warning
                 </h3>
-                <span className="text-xs text-on-surface-variant">
-                  Vascular &amp; Cranial Precaution
+                <span className="text-[9.5px] text-slate-400 font-semibold uppercase font-mono">
+                  ISO Vascular Alignment Check
                 </span>
               </div>
             </div>
-            <p className="text-xs text-on-surface leading-relaxed">
-              Trendelenburg tilt lowers cerebral perfusion and increases intra-thoracic pressure. Configure target angle (0° to 90°) and engage dual clinical safety triggers to confirm movement.
+            
+            <p className="text-xs text-slate-500 leading-relaxed text-left">
+              Deep Trendelenburg tilts can alter cerebral perfusion levels and venous return rates. Double authorization triggers are required to commit motorized positioning.
             </p>
 
-            {/* Target Angle Configuration 0-90° */}
-            <div className="bg-surface-container-low p-3 rounded-lg flex flex-col gap-2.5">
-              <div className="flex items-center justify-between">
-                <span className="text-[11px] font-bold text-on-surface-variant">
-                  Target Tilt Angle:
-                </span>
-                <span className="text-[13px] font-extrabold text-secondary">
+            {/* Target configuration */}
+            <div className="bg-slate-50 p-3 rounded-lg flex flex-col gap-2">
+              <div className="flex items-center justify-between text-xs">
+                <span className="font-bold text-slate-500 uppercase tracking-wider">Target Tilt Angle:</span>
+                <span className="font-extrabold text-secondary font-mono">
                   {Math.abs(targetTiltAngle)}° {tiltDirection === 'trend' ? 'Trendelenburg' : 'Rev. Trend'}
                 </span>
               </div>
 
-              {/* Direction Selector */}
-              <div className="grid grid-cols-2 gap-1.5 p-1 bg-surface-container rounded-lg">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setTiltDirection('trend');
-                    setTargetTiltAngle(-Math.abs(targetTiltAngle || 15));
-                  }}
-                  className={`py-1.5 px-2 rounded-md text-[11px] font-bold transition-all cursor-pointer ${
-                    tiltDirection === 'trend'
-                      ? 'bg-secondary text-on-secondary shadow-xs'
-                      : 'text-on-surface hover:bg-surface-container-high'
-                  }`}
-                >
-                  Trendelenburg (Head Down)
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setTiltDirection('rev');
-                    setTargetTiltAngle(Math.abs(targetTiltAngle || 15));
-                  }}
-                  className={`py-1.5 px-2 rounded-md text-[11px] font-bold transition-all cursor-pointer ${
-                    tiltDirection === 'rev'
-                      ? 'bg-primary text-on-primary shadow-xs'
-                      : 'text-on-surface hover:bg-surface-container-high'
-                  }`}
-                >
-                  Rev. Trend (Head Up)
-                </button>
-              </div>
-
-              {/* Range Slider 0 to 90 */}
-              <div className="relative w-full h-7 flex items-center">
-                <div className="w-full h-2.5 bg-surface-container rounded-full overflow-hidden">
+              {/* Slider inside modal */}
+              <div className="relative w-full h-8 flex items-center">
+                <div className="w-full h-1 bg-slate-200 rounded-full overflow-hidden">
                   <div
                     className="h-full bg-secondary rounded-full"
                     style={{ width: `${(Math.abs(targetTiltAngle) / 90) * 100}%` }}
@@ -805,86 +679,63 @@ export const AdvancedScreen: React.FC<AdvancedScreenProps> = ({
                   className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                 />
               </div>
-
-              {/* Quick Presets */}
-              <div className="flex items-center gap-1.5 overflow-x-auto">
-                {[0, 12, 15, 30, 45, 60, 90].map((deg) => (
-                  <button
-                    key={deg}
-                    type="button"
-                    onClick={() => {
-                      const sign = tiltDirection === 'trend' ? -1 : 1;
-                      setTargetTiltAngle(deg * sign);
-                    }}
-                    className={`px-2 py-1 rounded text-[10px] font-bold shrink-0 cursor-pointer ${
-                      Math.abs(targetTiltAngle) === deg
-                        ? 'bg-secondary text-on-secondary'
-                        : 'bg-surface-container text-on-surface hover:bg-surface-variant'
-                    }`}
-                  >
-                    {deg === 0 ? '0° Level' : deg === 90 ? '90° Max' : `${deg}°`}
-                  </button>
-                ))}
-              </div>
             </div>
 
-            <div className="bg-surface-container-low p-3 rounded-lg flex flex-col gap-2">
-              <span className="text-[10px] font-bold uppercase text-on-surface-variant text-center">
-                Dual Clinical Authorization Triggers
+            {/* Double safety authorization buttons */}
+            <div className="bg-slate-50 p-3 rounded-lg flex flex-col gap-2">
+              <span className="text-[9px] font-extrabold text-slate-400 uppercase tracking-widest text-center">
+                Dual caregiver tactile auth
               </span>
-              <div className="flex gap-2">
+              <div className="grid grid-cols-2 gap-2">
                 <button
                   onMouseDown={() => setT1Held(true)}
                   onMouseUp={() => setT1Held(false)}
                   onTouchStart={() => setT1Held(true)}
                   onTouchEnd={() => setT1Held(false)}
-                  className={`flex-1 min-h-[52px] rounded-lg font-bold text-xs uppercase transition-colors flex items-center justify-center gap-1 select-none cursor-pointer ${
+                  className={`h-11 rounded-lg font-bold text-xs uppercase transition-all flex items-center justify-center gap-1 cursor-pointer select-none border ${
                     t1Held
-                      ? 'bg-primary text-on-primary'
-                      : 'bg-surface-container text-on-surface'
+                      ? 'bg-primary text-white border-primary'
+                      : 'bg-white border-slate-200 text-slate-600'
                   }`}
                 >
-                  <span className="material-symbols-outlined text-[18px]">
-                    touch_app
-                  </span>{' '}
-                  L-Trigger
+                  <span className="material-symbols-outlined text-[16px]">touch_app</span>
+                  <span>Trigger 1</span>
                 </button>
                 <button
                   onMouseDown={() => setT2Held(true)}
                   onMouseUp={() => setT2Held(false)}
                   onTouchStart={() => setT2Held(true)}
                   onTouchEnd={() => setT2Held(false)}
-                  className={`flex-1 min-h-[52px] rounded-lg font-bold text-xs uppercase transition-colors flex items-center justify-center gap-1 select-none cursor-pointer ${
+                  className={`h-11 rounded-lg font-bold text-xs uppercase transition-all flex items-center justify-center gap-1 cursor-pointer select-none border ${
                     t2Held
-                      ? 'bg-primary text-on-primary'
-                      : 'bg-surface-container text-on-surface'
+                      ? 'bg-primary text-white border-primary'
+                      : 'bg-white border-slate-200 text-slate-600'
                   }`}
                 >
-                  <span className="material-symbols-outlined text-[18px]">
-                    touch_app
-                  </span>{' '}
-                  R-Trigger
+                  <span className="material-symbols-outlined text-[16px]">touch_app</span>
+                  <span>Trigger 2</span>
                 </button>
               </div>
-              <div className="w-full bg-surface-dim h-2 rounded-full overflow-hidden mt-1">
+
+              {/* Progress track */}
+              <div className="w-full bg-slate-200 h-1 rounded-full overflow-hidden mt-1">
                 <div
-                  className="h-full bg-tertiary transition-all duration-75"
+                  className="h-full bg-red-600 transition-all duration-75"
                   style={{ width: `${dualProgress}%` }}
                 />
               </div>
-              <span className="text-[11px] font-bold text-center text-on-surface-variant">
+              <span className="text-[9.5px] font-bold text-center text-slate-400 uppercase tracking-wider block mt-0.5">
                 {dualProgress >= 100
-                  ? 'Movement Approved & Initiated'
-                  : dualProgress > 0
-                  ? `Authorizing movement (${Math.round(dualProgress)}%)...`
+                  ? 'Commit approved'
                   : 'Hold both triggers for 3 seconds'}
               </span>
             </div>
+
             <button
               onClick={() => setShowTrendModal(false)}
-              className="min-h-[44px] w-full rounded-xl bg-surface-container-high hover:bg-surface-variant text-on-surface font-bold text-xs uppercase cursor-pointer"
+              className="h-10 w-full rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs uppercase cursor-pointer"
             >
-              Abort Movement
+              Abort Action
             </button>
           </div>
         </div>

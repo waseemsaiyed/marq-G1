@@ -2,6 +2,23 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+    <script>
+      // Suppress Vite HMR / WebSocket reconnection noise in iframe environment per platform guidelines
+      (function() {
+        const origError = console.error;
+        console.error = function(...args) {
+          const msg = typeof args[0] === 'string' ? args[0] : (args[0] && args[0].message) || '';
+          if (
+            typeof msg === 'string' &&
+            (msg.includes('[vite]') || msg.includes('WebSocket') || msg.includes('failed to connect to websocket'))
+          ) {
+            console.debug(...args);
+            return;
+          }
+          origError.apply(console, args);
+        };
+      })();
+    </script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
     <title>MARQ W-1</title>
     <meta name="description" content="Hospital-grade clinical smart bed remote controller featuring bed articulation, paired hardware device management, patient mass &amp; stability tracking, live vitals, diagnostic reports, medication records, and emergency clinical charting." />

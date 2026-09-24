@@ -9,6 +9,7 @@
  * as the default active connection without requiring manual pairing inside the app.
  */
 
+import { esp32Bridge } from './esp32HardwareBridge';
 import {
   autoDetectAndAdoptPairedBluetooth,
   AutoAdoptResult,
@@ -63,6 +64,7 @@ export async function autoDetectAndAdoptAllHardware(): Promise<UnifiedAutoAdoptR
   const hasWifi = Boolean(wifiResult && wifiResult.adopted);
 
   if (hasBt && hasWifi) {
+    esp32Bridge.setPreferredMode('hybrid');
     return {
       adopted: true,
       bluetooth: btResult,
